@@ -7,7 +7,12 @@ import pandas as pd
 
 from support import TempDatabase, sample_event, sample_events_frame
 
-from phillies_stats.ingest import filter_to_team_games, upsert_statcast_data
+from phillies_stats.ingest import (
+    filter_to_team_games,
+    normalize_pitcher_season_summary,
+    upsert_pitcher_season_summary,
+    upsert_statcast_data,
+)
 
 
 class IngestTests(unittest.TestCase):
@@ -56,6 +61,44 @@ class IngestTests(unittest.TestCase):
         self.assertEqual(first_insert, 2)
         self.assertEqual(second_insert, 0)
         self.assertEqual(event_count, 2)
+
+    def test_pitcher_season_summary_normalizes_and_upserts(self):
+        raw_summary = pd.DataFrame(
+            [
+                {
+                    "Name": "zack wheeler",
+                    "Team": "PHI",
+                    "W": 3,
+                    "L": 1,
+                    "G": 4,
+                    "GS": 4,
+                    "SV": 0,
+                    "IP": 25.1,
+                    "SO": 31,
+                    "BB": 5,
+                    "HR": 2,
+                    "ERA": 2.49,
+                    "WHIP": 0.87,
+                    "FBv": 97.4,
+                    "WAR": 1.2,
+                }
+            ]
+        )
+
+        normalized = normalize_pitcher_season_summary(raw_summary, season=2026)
+
+        with TempDatabase() as conn:
+            upsert_count = upsert_pitcher_season_summary(conn, normalized)
+            stored = conn.execute(
+                "SELECT pitcher_name, wins, innings_pitched, era, avg_fastball_velocity FROM pitcher_season_summary"
+            ).fetchone()
+
+        self.assertEqual(upsert_count, 1)
+        self.assertEqual(stored[0], "Zack Wheeler")
+        self.assertEqual(stored[1], 3)
+        self.assertEqual(stored[2], 25.1)
+        self.assertEqual(stored[3], 2.49)
+        self.assertEqual(stored[4], 97.4)
 
 
 if __name__ == "__main__":

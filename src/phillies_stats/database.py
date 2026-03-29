@@ -102,6 +102,28 @@ def initialize_database(conn: duckdb.DuckDBPyConnection) -> None:
             rows_inserted INTEGER DEFAULT 0,
             notes TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS pitcher_season_summary (
+            season INTEGER NOT NULL,
+            pitcher_name TEXT NOT NULL,
+            team TEXT,
+            wins INTEGER,
+            losses INTEGER,
+            games INTEGER,
+            games_started INTEGER,
+            saves INTEGER,
+            innings_pitched DOUBLE,
+            strikeouts INTEGER,
+            walks INTEGER,
+            home_runs_allowed INTEGER,
+            era DOUBLE,
+            whip DOUBLE,
+            avg_fastball_velocity DOUBLE,
+            war DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (season, pitcher_name)
+        );
         """
     )
     create_views(conn)
@@ -242,5 +264,84 @@ def create_views(conn: duckdb.DuckDBPyConnection) -> None:
         WHERE is_phillies_pitcher = TRUE
           AND release_speed IS NOT NULL
         ORDER BY release_speed DESC, game_date ASC, player_name ASC;
+
+        CREATE OR REPLACE VIEW pitcher_event_summary AS
+        SELECT
+            pitcher_id,
+            pitcher_name AS player_name,
+            COUNT(DISTINCT game_pk) AS appearances,
+            SUM(CASE WHEN is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts,
+            SUM(CASE WHEN events IN ('walk', 'intent_walk') THEN 1 ELSE 0 END) AS walks_issued,
+            SUM(CASE WHEN events = 'home_run' THEN 1 ELSE 0 END) AS home_runs_allowed,
+            SUM(CASE WHEN description IN ('swinging_strike', 'swinging_strike_blocked') THEN 1 ELSE 0 END) AS whiffs,
+            MAX(launch_speed) AS hardest_hit_allowed_mph,
+            MAX(release_speed) AS max_velocity_mph,
+            ROUND(AVG(CASE WHEN pitch_name IN ('4-Seam Fastball', 'Sinker', 'Cutter') THEN release_speed END), 2)
+                AS avg_fastball_velocity_mph
+        FROM statcast_events
+        WHERE is_phillies_pitcher = TRUE
+          AND pitcher_name IS NOT NULL
+        GROUP BY pitcher_id, pitcher_name
+        ORDER BY strikeouts DESC, player_name ASC;
+
+        CREATE OR REPLACE VIEW pitcher_strikeouts_by_month AS
+        SELECT
+            pitcher_name AS player_name,
+            DATE_TRUNC('month', game_date) AS month_start,
+            SUM(CASE WHEN is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts
+        FROM statcast_events
+        WHERE is_phillies_pitcher = TRUE
+          AND pitcher_name IS NOT NULL
+        GROUP BY pitcher_name, DATE_TRUNC('month', game_date)
+        ORDER BY month_start ASC, strikeouts DESC, player_name ASC;
+
+        CREATE OR REPLACE VIEW pitcher_strikeouts_by_opponent AS
+        SELECT
+            pitcher_name AS player_name,
+            opponent,
+            SUM(CASE WHEN is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts
+        FROM statcast_events
+        WHERE is_phillies_pitcher = TRUE
+          AND pitcher_name IS NOT NULL
+        GROUP BY pitcher_name, opponent
+        ORDER BY strikeouts DESC, player_name ASC, opponent ASC;
+
+        CREATE OR REPLACE VIEW pitcher_pitch_usage AS
+        SELECT
+            pitcher_name AS player_name,
+            pitch_name,
+            COUNT(*) AS pitch_count,
+            ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY pitcher_name), 2) AS usage_pct
+        FROM statcast_events
+        WHERE is_phillies_pitcher = TRUE
+          AND pitcher_name IS NOT NULL
+          AND pitch_name IS NOT NULL
+        GROUP BY pitcher_name, pitch_name
+        ORDER BY player_name ASC, pitch_count DESC, pitch_name ASC;
+
+        CREATE OR REPLACE VIEW pitcher_season_overview AS
+        SELECT
+            COALESCE(event_summary.player_name, season_summary.pitcher_name) AS player_name,
+            event_summary.pitcher_id,
+            season_summary.wins,
+            season_summary.losses,
+            season_summary.games,
+            season_summary.games_started,
+            season_summary.saves,
+            season_summary.innings_pitched,
+            COALESCE(season_summary.strikeouts, event_summary.strikeouts) AS strikeouts,
+            COALESCE(season_summary.walks, event_summary.walks_issued) AS walks_issued,
+            COALESCE(season_summary.home_runs_allowed, event_summary.home_runs_allowed) AS home_runs_allowed,
+            season_summary.era,
+            season_summary.whip,
+            COALESCE(season_summary.avg_fastball_velocity, event_summary.avg_fastball_velocity_mph)
+                AS avg_fastball_velocity_mph,
+            event_summary.max_velocity_mph,
+            event_summary.whiffs,
+            event_summary.hardest_hit_allowed_mph,
+            event_summary.appearances
+        FROM pitcher_event_summary event_summary
+        FULL OUTER JOIN pitcher_season_summary season_summary
+            ON LOWER(event_summary.player_name) = LOWER(season_summary.pitcher_name);
         """
     )

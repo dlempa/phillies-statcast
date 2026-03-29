@@ -6,6 +6,7 @@ from typing import Iterable
 
 import duckdb
 import pandas as pd
+import requests
 
 from phillies_stats.config import BALLPARK_BY_TEAM
 from phillies_stats.display import format_player_name
@@ -46,6 +47,10 @@ def _build_event_id(row: pd.Series) -> str:
         row.get("description"),
     ]
     return "|".join("" if pd.isna(value) else str(value) for value in keys)
+
+
+def _numeric_series(df: pd.DataFrame, column: str) -> pd.Series:
+    return pd.to_numeric(_series(df, column), errors="coerce")
 
 
 def _lookup_player_names(player_ids: pd.Series) -> dict[int, str]:
@@ -116,6 +121,70 @@ def fetch_statcast_window(start_date: date, end_date: date, team_code: str = "PH
     if frame is None or frame.empty:
         return pd.DataFrame()
     return filter_to_team_games(frame, team_code=team_code)
+
+
+def fetch_pitcher_season_summary(
+    conn: duckdb.DuckDBPyConnection,
+    season: int,
+    team_code: str = "PHI",
+) -> pd.DataFrame:
+    games = conn.execute(
+        """
+        SELECT game_pk, game_date
+        FROM games
+        WHERE season = ?
+        ORDER BY game_date ASC, game_pk ASC
+        """,
+        [season],
+    ).df()
+    if games.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    for game in games.itertuples(index=False):
+        url = f"https://statsapi.mlb.com/api/v1/game/{int(game.game_pk)}/boxscore"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        rows.extend(_extract_pitcher_summary_rows(response.json(), season=season, game_date=game.game_date, team_code=team_code))
+    return pd.DataFrame(rows)
+
+
+def normalize_pitcher_season_summary(raw_df: pd.DataFrame, season: int, team_code: str = "PHI") -> pd.DataFrame:
+    if raw_df.empty:
+        return pd.DataFrame()
+
+    normalized = pd.DataFrame(
+        {
+            "season": season,
+            "pitcher_name": _series(raw_df, "pitcher_name", default=None).fillna(_series(raw_df, "Name")).map(format_player_name),
+            "team": _series(raw_df, "team", default=None).fillna(_series(raw_df, "Team")).fillna(team_code),
+            "wins": _numeric_series(raw_df, "wins").fillna(_numeric_series(raw_df, "W")),
+            "losses": _numeric_series(raw_df, "losses").fillna(_numeric_series(raw_df, "L")),
+            "games": _numeric_series(raw_df, "games").fillna(_numeric_series(raw_df, "G")),
+            "games_started": _numeric_series(raw_df, "games_started").fillna(_numeric_series(raw_df, "GS")),
+            "saves": _numeric_series(raw_df, "saves").fillna(_numeric_series(raw_df, "SV")),
+            "innings_pitched": _numeric_series(raw_df, "innings_pitched").fillna(_numeric_series(raw_df, "IP")),
+            "strikeouts": _numeric_series(raw_df, "strikeouts").fillna(_numeric_series(raw_df, "SO")),
+            "walks": _numeric_series(raw_df, "walks").fillna(_numeric_series(raw_df, "BB")),
+            "home_runs_allowed": _numeric_series(raw_df, "home_runs_allowed").fillna(_numeric_series(raw_df, "HR")),
+            "era": _numeric_series(raw_df, "era").fillna(_numeric_series(raw_df, "ERA")),
+            "whip": _numeric_series(raw_df, "whip").fillna(_numeric_series(raw_df, "WHIP")),
+            "avg_fastball_velocity": _numeric_series(raw_df, "avg_fastball_velocity").fillna(_numeric_series(raw_df, "FBv")),
+            "war": _numeric_series(raw_df, "war").fillna(_numeric_series(raw_df, "WAR")),
+            "game_date": pd.to_datetime(_series(raw_df, "game_date"), errors="coerce").dt.date,
+        }
+    )
+    normalized = normalized.dropna(subset=["pitcher_name"])
+    if normalized["game_date"].notna().any():
+        normalized = (
+            normalized.sort_values(["game_date", "pitcher_name"])
+            .groupby(["season", "pitcher_name"], as_index=False)
+            .last()
+        )
+    else:
+        normalized = normalized.drop_duplicates(subset=["season", "pitcher_name"])
+    normalized = normalized.drop(columns=["game_date"], errors="ignore")
+    return normalized
 
 
 def normalize_statcast_events(raw_df: pd.DataFrame, season: int, team_code: str = "PHI") -> pd.DataFrame:
@@ -519,6 +588,136 @@ def upsert_statcast_data(
 
     after_count = conn.execute("SELECT COUNT(*) FROM statcast_events").fetchone()[0]
     return after_count - before_count
+
+
+def upsert_pitcher_season_summary(
+    conn: duckdb.DuckDBPyConnection,
+    summary_df: pd.DataFrame,
+) -> int:
+    if summary_df.empty:
+        return 0
+
+    before_count = conn.execute("SELECT COUNT(*) FROM pitcher_season_summary").fetchone()[0]
+    conn.register("pitcher_summary_stage", summary_df)
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO pitcher_season_summary (
+            season,
+            pitcher_name,
+            team,
+            wins,
+            losses,
+            games,
+            games_started,
+            saves,
+            innings_pitched,
+            strikeouts,
+            walks,
+            home_runs_allowed,
+            era,
+            whip,
+            avg_fastball_velocity,
+            war,
+            updated_at
+        )
+        SELECT
+            season,
+            pitcher_name,
+            team,
+            wins,
+            losses,
+            games,
+            games_started,
+            saves,
+            innings_pitched,
+            strikeouts,
+            walks,
+            home_runs_allowed,
+            era,
+            whip,
+            avg_fastball_velocity,
+            war,
+            CURRENT_TIMESTAMP
+        FROM pitcher_summary_stage
+        """
+    )
+    conn.unregister("pitcher_summary_stage")
+    after_count = conn.execute("SELECT COUNT(*) FROM pitcher_season_summary").fetchone()[0]
+    return max(after_count - before_count, len(summary_df))
+
+
+def refresh_pitcher_season_summary(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    season: int,
+    team_code: str = "PHI",
+) -> int:
+    raw_df = fetch_pitcher_season_summary(conn, season=season, team_code=team_code)
+    normalized = normalize_pitcher_season_summary(raw_df, season=season, team_code=team_code)
+    return upsert_pitcher_season_summary(conn, normalized)
+
+
+def _extract_pitcher_summary_rows(
+    boxscore: dict[str, object],
+    *,
+    season: int,
+    game_date: object,
+    team_code: str,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    teams = boxscore.get("teams", {})
+    if not isinstance(teams, dict):
+        return rows
+
+    for side in ["home", "away"]:
+        team_section = teams.get(side, {})
+        if not isinstance(team_section, dict):
+            continue
+        team_info = team_section.get("team", {})
+        if not isinstance(team_info, dict) or team_info.get("abbreviation") != team_code:
+            continue
+
+        players = team_section.get("players", {})
+        pitcher_ids = team_section.get("pitchers", [])
+        if not isinstance(players, dict) or not isinstance(pitcher_ids, list):
+            continue
+
+        for pitcher_id in pitcher_ids:
+            player = players.get(f"ID{pitcher_id}", {})
+            if not isinstance(player, dict):
+                continue
+            season_stats = player.get("seasonStats", {})
+            if not isinstance(season_stats, dict):
+                continue
+            pitching_stats = season_stats.get("pitching", {})
+            if not isinstance(pitching_stats, dict) or not pitching_stats:
+                continue
+            person = player.get("person", {})
+            if not isinstance(person, dict):
+                continue
+
+            rows.append(
+                {
+                    "season": season,
+                    "game_date": game_date,
+                    "pitcher_name": format_player_name(person.get("fullName")),
+                    "team": team_code,
+                    "wins": pitching_stats.get("wins"),
+                    "losses": pitching_stats.get("losses"),
+                    "games": pitching_stats.get("gamesPitched", pitching_stats.get("gamesPlayed")),
+                    "games_started": pitching_stats.get("gamesStarted"),
+                    "saves": pitching_stats.get("saves"),
+                    "innings_pitched": pitching_stats.get("inningsPitched"),
+                    "strikeouts": pitching_stats.get("strikeOuts"),
+                    "walks": pitching_stats.get("baseOnBalls"),
+                    "home_runs_allowed": pitching_stats.get("homeRuns"),
+                    "era": pitching_stats.get("era"),
+                    "whip": pitching_stats.get("whip"),
+                    "avg_fastball_velocity": None,
+                    "war": None,
+                }
+            )
+    return rows
 
 
 def ingest_date_range(

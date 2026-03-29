@@ -12,7 +12,7 @@ if str(SRC_PATH) not in sys.path:
 
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
-from phillies_stats.ingest import ingest_date_range
+from phillies_stats.ingest import ingest_date_range, refresh_pitcher_season_summary
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,9 +41,19 @@ def main() -> None:
         team_code=config.team_code,
         window_days=args.window_days,
     )
+    pitcher_summary_rows = 0
+    pitcher_summary_warning = None
+    try:
+        pitcher_summary_rows = refresh_pitcher_season_summary(conn, season=config.season, team_code=config.team_code)
+    except Exception as exc:
+        pitcher_summary_warning = str(exc)
+
     print(f"Backfill complete for {config.season}.")
     print(f"Rows seen: {result['rows_seen']}")
     print(f"Rows inserted: {result['rows_inserted']}")
+    print(f"Pitcher summary rows refreshed: {pitcher_summary_rows}")
+    if pitcher_summary_warning:
+        print(f"Pitcher summary warning: {pitcher_summary_warning}")
     print(f"Database: {config.db_path}")
 
 

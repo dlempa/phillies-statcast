@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import date, datetime
 
 import pandas as pd
@@ -9,7 +10,7 @@ import pandas as pd
 def format_player_name(name: object) -> object:
     if not isinstance(name, str):
         return name
-    clean_name = " ".join(name.split())
+    clean_name = _reorder_comma_name(" ".join(name.split()))
     if not clean_name:
         return None
 
@@ -20,6 +21,15 @@ def format_player_name(name: object) -> object:
         else:
             pieces.append(token.title())
     return " ".join(pieces)
+
+
+def normalize_player_key(name: object) -> str | None:
+    formatted = format_player_name(name)
+    if not isinstance(formatted, str):
+        return None
+    ascii_name = unicodedata.normalize("NFKD", formatted)
+    ascii_name = "".join(char for char in ascii_name if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]", "", ascii_name.lower())
 
 
 def format_display_dataframe(frame: pd.DataFrame) -> pd.DataFrame:
@@ -62,3 +72,12 @@ def _format_value(value: object) -> object:
     if isinstance(value, float):
         return str(int(value)) if value.is_integer() else f"{value:.2f}"
     return value
+
+
+def _reorder_comma_name(name: str) -> str:
+    if "," not in name:
+        return name
+    last_name, first_name = [piece.strip() for piece in name.split(",", 1)]
+    if not first_name:
+        return last_name
+    return f"{first_name} {last_name}"
