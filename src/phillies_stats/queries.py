@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from datetime import date
 
 import duckdb
@@ -207,7 +208,27 @@ def get_player_summary(conn: duckdb.DuckDBPyConnection, player_name: str) -> dic
         """,
         [player_name],
     ).df()
-    return {"summary": hr_summary, "monthly": monthly}
+    if not monthly.empty:
+        monthly["month_name"] = monthly["month_start"].map(lambda value: calendar.month_name[value.month])
+
+    home_runs = conn.execute(
+        """
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY game_date ASC, event_id ASC) AS home_run_number,
+            game_date,
+            opponent,
+            venue_name,
+            hit_distance_sc AS distance_ft,
+            launch_speed AS exit_velocity_mph,
+            launch_angle
+        FROM phillies_home_runs
+        WHERE LOWER(batter_name) = LOWER(?)
+        ORDER BY game_date ASC, event_id ASC
+        """,
+        [player_name],
+    ).df()
+
+    return {"summary": hr_summary, "monthly": monthly, "home_runs": home_runs}
 
 
 def get_game_log(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:

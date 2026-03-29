@@ -50,6 +50,26 @@ else:
         if monthly.empty:
             st.info("No monthly home run totals are available yet.")
         else:
-            chart_data = monthly.rename(columns={"month_start": "Month", "home_run_count": "Home Runs"})
+            chart_data = monthly.rename(columns={"month_name": "Month", "home_run_count": "Home Runs"})[
+                ["Month", "Home Runs"]
+            ]
             st.bar_chart(chart_data.set_index("Month")["Home Runs"])
             st.markdown(render_centered_table(chart_data), unsafe_allow_html=True)
+
+        st.subheader("All Home Runs")
+        home_runs = player_summary["home_runs"]
+        if home_runs.empty:
+            st.info("No home runs are available for this player yet.")
+        else:
+            display_home_runs = home_runs.rename(
+                columns={
+                    "home_run_number": "HR #",
+                    "game_date": "Date",
+                    "opponent": "Opponent",
+                    "venue_name": "Ballpark",
+                    "distance_ft": "Distance (ft)",
+                    "exit_velocity_mph": "Exit Velocity (mph)",
+                    "launch_angle": "Launch Angle",
+                }
+            )
+            st.markdown(render_centered_table(display_home_runs), unsafe_allow_html=True)

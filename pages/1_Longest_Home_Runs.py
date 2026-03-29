@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import sys
 from pathlib import Path
 
@@ -25,17 +26,18 @@ st.caption("The Top 10 is generated live from stored Statcast events, so nightly
 
 players = get_player_options(conn)
 months = get_month_options(conn)
+month_options = {"All months": None, **{calendar.month_name[month]: month for month in months}}
 
 filter_col_1, filter_col_2, filter_col_3 = st.columns(3)
 player_filter = filter_col_1.selectbox("Player", options=["All players"] + players)
-month_filter = filter_col_2.selectbox("Month", options=["All months"] + months)
+month_filter = filter_col_2.selectbox("Month", options=list(month_options.keys()))
 home_away_filter = filter_col_3.selectbox("Home / Away", options=["All", "Home", "Away"])
 
 results = get_top_longest_home_runs(
     conn,
     limit=10,
     player=None if player_filter == "All players" else player_filter,
-    month=None if month_filter == "All months" else int(month_filter),
+    month=month_options[month_filter],
     home_away=None if home_away_filter == "All" else home_away_filter,
 )
 
