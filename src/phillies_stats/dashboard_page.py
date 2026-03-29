@@ -5,8 +5,16 @@ import streamlit as st
 
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
-from phillies_stats.display import format_display_dataframe, format_metric_value, render_centered_table
-from phillies_stats.queries import get_dashboard_metrics, get_hr_distance_over_time, get_last_updated, get_top_longest_home_runs
+from phillies_stats.display import format_metric_value, format_player_name, render_highlight_table
+from phillies_stats.queries import (
+    get_dashboard_metrics,
+    get_hardest_hit_home_runs,
+    get_hr_distance_over_time,
+    get_last_updated,
+    get_player_hr_distance_stats,
+    get_top_longest_home_runs,
+)
+from phillies_stats.ui import apply_app_theme, format_card, format_timestamp, render_page_header, render_section_heading, render_stat_cards, style_chart
 
 
 def _format_metric(result, unit: str, fallback: str = "No data yet") -> tuple[str, str]:
@@ -22,77 +30,157 @@ def render_hitter_dashboard() -> None:
     config = get_config()
     conn = get_connection(config.db_path)
     initialize_database(conn)
-
-    st.title("Hitter Dashboard")
-    st.caption(f"Phillies home runs and power stats for the {config.season} season.")
+    apply_app_theme()
 
     metrics = get_dashboard_metrics(conn)
     last_updated = get_last_updated(conn)
     top_10 = get_top_longest_home_runs(conn, limit=10)
     distance_over_time = get_hr_distance_over_time(conn)
+    hardest_home_runs = get_hardest_hit_home_runs(conn, limit=5)
+    player_distance = get_player_hr_distance_stats(conn).head(6)
 
-    card_1, card_2, card_3, card_4 = st.columns(4)
-    value, player = _format_metric(metrics["longest_hr"], "ft")
-    card_1.metric("Longest HR of season", value, player)
-    value, player = _format_metric(metrics["most_hrs"], "HR")
-    card_2.metric("Most HRs by a Phillies player", value, player)
-    value, player = _format_metric(metrics["hardest_hr"], "mph")
-    card_3.metric("Hardest-hit HR", value, player)
-    value, player = _format_metric(metrics["hardest_ball"], "mph")
-    card_4.metric("Hardest-hit ball overall", value, player)
+    render_page_header(
+        "Hitter Dashboard",
+        f"Phillies home runs and power stats for the {config.season} season, organized around the season’s biggest swings.",
+        eyebrow="Hitter Stats",
+        meta=f"Last updated {format_timestamp(last_updated)}" if last_updated else None,
+    )
 
-    if last_updated:
-        st.write(f"Last updated: {last_updated}")
-    else:
+    if not last_updated:
         st.info("No Statcast data is loaded yet. Run the bootstrap script to backfill the season.")
 
-    st.subheader("Current Top 10 Longest Phillies Home Runs")
-    if top_10.empty:
-        st.info("No home run data is available yet.")
-    else:
-        preview = top_10.rename(
-            columns={
-                "player_name": "Player",
-                "game_date": "Date",
-                "opponent": "Opponent",
-                "venue_name": "Ballpark",
-                "home_away": "Home/Away",
-                "distance_ft": "Distance (ft)",
-                "exit_velocity_mph": "Exit Velocity (mph)",
-                "launch_angle": "Launch Angle",
-            }
-        )
-        st.markdown(render_centered_table(preview), unsafe_allow_html=True)
+    render_stat_cards(
+        [
+            _build_metric_card("Longest HR of season", metrics["longest_hr"], " ft", tone="accent"),
+            _build_metric_card("Most HRs by a Phillie", metrics["most_hrs"], " HR"),
+            _build_metric_card("Hardest-hit HR", metrics["hardest_hr"], " mph"),
+            _build_metric_card("Hardest-hit ball overall", metrics["hardest_ball"], " mph"),
+        ]
+    )
 
-    st.subheader("Phillies Home Run Distance Scatter Plot")
-    if distance_over_time.empty:
-        st.info("The chart will appear after Phillies home run events are loaded.")
-    else:
-        chart_data = format_display_dataframe(
-            distance_over_time.rename(
-                columns={
-                    "game_date": "Date",
-                    "distance_ft": "Distance (ft)",
-                    "player_name": "Player",
-                    "opponent": "Opponent",
-                    "venue_name": "Ballpark",
-                }
+    feature_col, leaderboard_col = st.columns([1.35, 1])
+
+    with feature_col:
+        with st.container(border=True):
+            render_section_heading(
+                "Featured Chart",
+                "Every Phillies home run from the season plotted by date and distance for a quick read on power spikes.",
             )
-        )
-        chart_data["Date"] = distance_over_time["game_date"]
-        chart = (
-            alt.Chart(chart_data)
-            .mark_circle(size=90)
-            .encode(
-                x=alt.X("Date:T", title="Date"),
-                y=alt.Y("Distance (ft):Q", title="Distance (ft)"),
-                color=alt.Color("Player:N", title="Player"),
-                tooltip=["Player", "Distance (ft)", "Opponent", "Ballpark", "Date"],
+            if distance_over_time.empty:
+                st.info("The chart will appear after Phillies home run events are loaded.")
+            else:
+                chart_data = distance_over_time.copy()
+                chart_data["player_name"] = chart_data["player_name"].map(format_player_name)
+                chart = style_chart(
+                    alt.Chart(chart_data)
+                    .mark_circle(size=110, opacity=0.88)
+                    .encode(
+                        x=alt.X("game_date:T", title="Date"),
+                        y=alt.Y("distance_ft:Q", title="Distance (ft)"),
+                        color=alt.Color("player_name:N", title="Player"),
+                        tooltip=[
+                            alt.Tooltip("player_name:N", title="Player"),
+                            alt.Tooltip("distance_ft:Q", title="Distance (ft)", format=".0f"),
+                            alt.Tooltip("opponent:N", title="Opponent"),
+                            alt.Tooltip("venue_name:N", title="Ballpark"),
+                            alt.Tooltip("game_date:T", title="Date", format="%m-%d-%Y"),
+                        ],
+                    )
+                    .interactive(),
+                    height=390,
+                )
+                st.altair_chart(chart, use_container_width=True)
+
+    with leaderboard_col:
+        with st.container(border=True):
+            render_section_heading(
+                "Featured Leaderboard",
+                "The live top 10 longest Phillies home runs. Nightly data updates can move this board automatically.",
             )
-            .interactive()
-        )
-        st.altair_chart(chart, use_container_width=True)
+            if top_10.empty:
+                st.info("No home run data is available yet.")
+            else:
+                preview = top_10.rename(
+                    columns={
+                        "rank": "Rank",
+                        "player_name": "Player",
+                        "game_date": "Date",
+                        "opponent": "Opponent",
+                        "venue_name": "Ballpark",
+                        "home_away": "Home/Away",
+                        "distance_ft": "Distance (ft)",
+                        "exit_velocity_mph": "Exit Velocity (mph)",
+                        "launch_angle": "Launch Angle",
+                    }
+                )
+                st.markdown(
+                    render_highlight_table(
+                        preview,
+                        emphasis_columns=["Rank", "Player", "Distance (ft)"],
+                        secondary_columns=["Exit Velocity (mph)", "Launch Angle", "Home/Away"],
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+    secondary_left, secondary_right = st.columns(2)
+
+    with secondary_left:
+        with st.container(border=True):
+            render_section_heading("Hardest-hit Home Runs", "A quick look at the loudest Phillies barrels.")
+            if hardest_home_runs.empty:
+                st.info("Hard-hit home run data is not available yet.")
+            else:
+                st.markdown(
+                    render_highlight_table(
+                        hardest_home_runs.rename(
+                            columns={
+                                "player_name": "Player",
+                                "game_date": "Date",
+                                "opponent": "Opponent",
+                                "distance_ft": "Distance (ft)",
+                                "exit_velocity_mph": "Exit Velocity (mph)",
+                            }
+                        ),
+                        emphasis_columns=["Player", "Exit Velocity (mph)"],
+                        secondary_columns=["Date", "Opponent"],
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+    with secondary_right:
+        with st.container(border=True):
+            render_section_heading("Power By Hitter", "Average and max home run distance leaders across the roster.")
+            if player_distance.empty:
+                st.info("Player power summaries will appear after home run data is loaded.")
+            else:
+                st.markdown(
+                    render_highlight_table(
+                        player_distance.rename(
+                            columns={
+                                "player_name": "Player",
+                                "home_run_count": "HRs",
+                                "avg_hr_distance_ft": "Average Distance (ft)",
+                                "max_hr_distance_ft": "Longest HR (ft)",
+                            }
+                        ),
+                        emphasis_columns=["Player", "Longest HR (ft)"],
+                        secondary_columns=["Average Distance (ft)"],
+                    ),
+                    unsafe_allow_html=True,
+                )
 
 
 def render_dashboard() -> None:
     render_hitter_dashboard()
+
+
+def _build_metric_card(label: str, result: tuple[object, object] | None, suffix: str, tone: str = "default") -> dict[str, str]:
+    if not result:
+        return {"label": label, "value": "No data", "helper": "", "tone": tone}
+    player_name, value = result
+    return {
+        "label": label,
+        "value": format_card(value, suffix),
+        "helper": str(player_name) if player_name else "",
+        "tone": tone,
+    }

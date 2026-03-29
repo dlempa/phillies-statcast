@@ -13,42 +13,136 @@ if str(SRC_PATH) not in sys.path:
 
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
-from phillies_stats.display import format_display_dataframe, render_centered_table
+from phillies_stats.display import format_metric_value, render_highlight_table
 from phillies_stats.queries import get_fastest_pitches, get_pitcher_velocity_summary
+from phillies_stats.ui import apply_app_theme, render_page_header, render_section_heading, render_stat_cards, style_chart
 
 
 config = get_config()
 conn = get_connection(config.db_path)
 initialize_database(conn)
+apply_app_theme()
 
-st.title("Velocity Leaders")
-st.caption("The loudest Phillies velocity marks from the season so far.")
+render_page_header(
+    "Velocity Leaders",
+    "The pitching counterpart to the home run leaderboard: fastest pitches first, supported by broader max and average fastball velocity context.",
+    eyebrow="Pitcher Stats",
+)
 
-st.subheader("Top 10 Fastest Pitches")
 fastest_pitches = get_fastest_pitches(conn, limit=10)
-if fastest_pitches.empty:
+velocity_summary = get_pitcher_velocity_summary(conn, limit=20)
+
+if fastest_pitches.empty and velocity_summary.empty:
     st.info("No Phillies pitch velocity data is available yet.")
 else:
-    st.markdown(render_centered_table(fastest_pitches.rename(columns={"player_name": "Pitcher"})), unsafe_allow_html=True)
+    cards: list[dict[str, str]] = []
+    if not fastest_pitches.empty:
+        fastest = fastest_pitches.iloc[0]
+        cards.append(
+            {
+                "label": "Fastest pitch",
+                "value": f"{format_metric_value(fastest['release_speed'])} mph",
+                "helper": str(fastest["player_name"]),
+                "tone": "accent",
+            }
+        )
+    if not velocity_summary.empty:
+        max_velocity_leader = velocity_summary.iloc[0]
+        avg_fastball_leader = velocity_summary.sort_values(
+            ["avg_fastball_velocity_mph", "max_velocity_mph"], ascending=[False, False]
+        ).iloc[0]
+        cards.extend(
+            [
+                {
+                    "label": "Max velo leader",
+                    "value": f"{format_metric_value(max_velocity_leader['max_velocity_mph'])} mph",
+                    "helper": str(max_velocity_leader["player_name"]),
+                },
+                {
+                    "label": "Avg fastball leader",
+                    "value": f"{format_metric_value(avg_fastball_leader['avg_fastball_velocity_mph'])} mph",
+                    "helper": str(avg_fastball_leader["player_name"]),
+                },
+                {
+                    "label": "Pitchers 98+",
+                    "value": format_metric_value((velocity_summary["max_velocity_mph"] >= 98).sum()),
+                    "helper": "Pitchers who have hit at least 98 mph",
+                },
+            ]
+        )
+    if cards:
+        render_stat_cards(cards)
 
-st.subheader("Max Velocity and Average Fastball Velocity By Pitcher")
-velocity_summary = get_pitcher_velocity_summary(conn, limit=20)
-if velocity_summary.empty:
-    st.info("Pitcher velocity summaries are not available yet.")
-else:
-    display = velocity_summary.rename(
-        columns={
-            "player_name": "Pitcher",
-            "max_velocity_mph": "Max Velocity (mph)",
-            "avg_fastball_velocity_mph": "Average Fastball Velocity (mph)",
-        }
-    )
-    st.markdown(render_centered_table(display), unsafe_allow_html=True)
+if not fastest_pitches.empty:
+    with st.container(border=True):
+        render_section_heading(
+            "Top 10 Fastest Pitches",
+            "Pitcher, date, opponent, pitch type, and raw velocity are visually foregrounded here.",
+        )
+        st.markdown(
+            render_highlight_table(
+                fastest_pitches.rename(
+                    columns={
+                        "player_name": "Pitcher",
+                        "game_date": "Date",
+                        "opponent": "Opponent",
+                        "pitch_name": "Pitch Type",
+                        "release_speed": "Velocity (mph)",
+                    }
+                ),
+                emphasis_columns=["Pitcher", "Velocity (mph)"],
+                secondary_columns=["Date", "Opponent", "Pitch Type"],
+            ),
+            unsafe_allow_html=True,
+        )
 
-    chart_data = format_display_dataframe(display.copy())
-    velocity_chart = alt.Chart(chart_data).mark_bar().encode(
-        x=alt.X("Pitcher:N", sort="-y"),
-        y=alt.Y("Max Velocity (mph):Q", title="Max Velocity (mph)"),
-        tooltip=["Pitcher", "Max Velocity (mph)", "Average Fastball Velocity (mph)"],
-    )
-    st.altair_chart(velocity_chart, use_container_width=True)
+summary_left, summary_right = st.columns([1.15, 1])
+
+with summary_left:
+    with st.container(border=True):
+        render_section_heading("Velocity Leaders Chart", "Maximum velocity by pitcher, sorted from top of the board downward.")
+        if velocity_summary.empty:
+            st.info("Pitcher velocity summaries are not available yet.")
+        else:
+            chart = style_chart(
+                alt.Chart(velocity_summary)
+                .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, color="#c73c50")
+                .encode(
+                    x=alt.X("player_name:N", sort="-y", title="Pitcher"),
+                    y=alt.Y("max_velocity_mph:Q", title="Max Velocity (mph)"),
+                    tooltip=[
+                        alt.Tooltip("player_name:N", title="Pitcher"),
+                        alt.Tooltip("max_velocity_mph:Q", title="Max Velocity (mph)", format=".2f"),
+                        alt.Tooltip(
+                            "avg_fastball_velocity_mph:Q",
+                            title="Average Fastball Velocity (mph)",
+                            format=".2f",
+                        ),
+                    ],
+                ),
+                height=340,
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+with summary_right:
+    with st.container(border=True):
+        render_section_heading("Velocity Summary", "Maximum velocity and average fastball velocity by pitcher.")
+        if velocity_summary.empty:
+            st.info("Pitcher velocity summaries are not available yet.")
+        else:
+            display = velocity_summary.rename(
+                columns={
+                    "player_name": "Pitcher",
+                    "position": "Role",
+                    "max_velocity_mph": "Max Velocity (mph)",
+                    "avg_fastball_velocity_mph": "Average Fastball Velocity (mph)",
+                }
+            )
+            st.markdown(
+                render_highlight_table(
+                    display,
+                    emphasis_columns=["Pitcher", "Max Velocity (mph)"],
+                    secondary_columns=["Average Fastball Velocity (mph)", "Role"],
+                ),
+                unsafe_allow_html=True,
+            )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import re
 import unicodedata
 from datetime import date, datetime
@@ -45,16 +46,21 @@ def format_display_dataframe(frame: pd.DataFrame) -> pd.DataFrame:
 
 def render_centered_table(frame: pd.DataFrame) -> str:
     formatted = format_display_dataframe(frame)
-    html = formatted.to_html(index=False, escape=False, classes="phillies-table", border=0)
-    return (
-        "<style>"
-        ".phillies-table-wrap{overflow-x:auto;}"
-        ".phillies-table{width:100%;border-collapse:collapse;font-size:0.95rem;}"
-        ".phillies-table th,.phillies-table td{padding:0.55rem 0.7rem;border:1px solid rgba(49,51,63,0.2);text-align:center;vertical-align:middle;}"
-        ".phillies-table th{background:#f3f4f6;font-weight:600;}"
-        "</style>"
-        f"<div class='phillies-table-wrap'>{html}</div>"
-    )
+    normalized_emphasis: set[str] = set()
+    normalized_secondary: set[str] = set()
+    return _render_html_table(formatted, normalized_emphasis, normalized_secondary)
+
+
+def render_highlight_table(
+    frame: pd.DataFrame,
+    *,
+    emphasis_columns: list[str] | None = None,
+    secondary_columns: list[str] | None = None,
+) -> str:
+    formatted = format_display_dataframe(frame)
+    normalized_emphasis = {_normalize_column_name(column) for column in emphasis_columns or []}
+    normalized_secondary = {_normalize_column_name(column) for column in secondary_columns or []}
+    return _render_html_table(formatted, normalized_emphasis, normalized_secondary)
 
 
 def format_metric_value(value: object) -> str:
@@ -81,3 +87,43 @@ def _reorder_comma_name(name: str) -> str:
     if not first_name:
         return last_name
     return f"{first_name} {last_name}"
+
+
+def _normalize_column_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _render_html_table(
+    frame: pd.DataFrame,
+    emphasis_columns: set[str],
+    secondary_columns: set[str],
+) -> str:
+    header_html = []
+    for column in frame.columns:
+        header_html.append(f"<th>{escape(str(column))}</th>")
+
+    body_rows = []
+    for _, row in frame.iterrows():
+        row_cells = []
+        for column, value in row.items():
+            cell_classes = []
+            normalized = _normalize_column_name(str(column))
+            if normalized in emphasis_columns:
+                cell_classes.append("cell-emphasis")
+            if normalized in secondary_columns:
+                cell_classes.append("cell-secondary")
+            if normalized in {"rank", "hr", "hrnumber"}:
+                cell_classes.append("cell-rank")
+            class_attr = f" class='{' '.join(cell_classes)}'" if cell_classes else ""
+            display_value = "—" if value is None or value is pd.NA else escape(str(value))
+            row_cells.append(f"<td{class_attr}>{display_value}</td>")
+        body_rows.append(f"<tr>{''.join(row_cells)}</tr>")
+
+    return (
+        "<div class='phillies-table-wrap'>"
+        "<table class='phillies-table'>"
+        f"<thead><tr>{''.join(header_html)}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody>"
+        "</table>"
+        "</div>"
+    )

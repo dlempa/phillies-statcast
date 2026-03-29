@@ -12,34 +12,97 @@ if str(SRC_PATH) not in sys.path:
 
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
-from phillies_stats.display import render_centered_table
+from phillies_stats.display import format_metric_value, render_highlight_table
 from phillies_stats.queries import get_game_log
+from phillies_stats.ui import apply_app_theme, render_filter_caption, render_page_header, render_section_heading, render_stat_cards
 
 
 config = get_config()
 conn = get_connection(config.db_path)
 initialize_database(conn)
+apply_app_theme()
 
-st.title("Game Log")
-st.caption("One row per Phillies game, with quick power highlights from that game.")
+render_page_header(
+    "Game Log",
+    "One row per Phillies game, with a cleaner season view of results, home run output, and the hardest-hit ball from each matchup.",
+    eyebrow="Overview",
+)
 
 game_log = get_game_log(conn)
 if game_log.empty:
     st.info("The game log will appear after Statcast game data is loaded.")
 else:
-    st.markdown(
-        render_centered_table(
-            game_log.rename(
-                columns={
-                    "game_date": "Date",
-                    "opponent": "Opponent",
-                    "venue_name": "Ballpark",
-                    "result_text": "Result",
-                    "hr_count": "HRs",
-                    "longest_hr_ft": "Longest HR (ft)",
-                    "hardest_hit_ball_mph": "Hardest-hit Ball (mph)",
-                }
+    with st.container(border=True):
+        render_section_heading("Filters", "Keep the table compact by filtering by opponent, result, or ballpark.")
+        render_filter_caption("Game log filters")
+        filter_col_1, filter_col_2, filter_col_3 = st.columns(3)
+        opponent_filter = filter_col_1.selectbox(
+            "Opponent",
+            options=["All opponents"] + sorted(game_log["opponent"].dropna().unique().tolist()),
+        )
+        result_filter = filter_col_2.selectbox(
+            "Result",
+            options=["All results"] + sorted(game_log["result_text"].dropna().unique().tolist()),
+        )
+        venue_filter = filter_col_3.selectbox(
+            "Ballpark",
+            options=["All ballparks"] + sorted(game_log["venue_name"].dropna().unique().tolist()),
+        )
+
+    filtered = game_log.copy()
+    if opponent_filter != "All opponents":
+        filtered = filtered.loc[filtered["opponent"] == opponent_filter]
+    if result_filter != "All results":
+        filtered = filtered.loc[filtered["result_text"] == result_filter]
+    if venue_filter != "All ballparks":
+        filtered = filtered.loc[filtered["venue_name"] == venue_filter]
+
+    if filtered.empty:
+        st.info("No games match the current filters.")
+    else:
+        render_stat_cards(
+            [
+                {
+                    "label": "Games shown",
+                    "value": format_metric_value(len(filtered)),
+                    "helper": "Newest games stay at the top",
+                    "tone": "accent",
+                },
+                {
+                    "label": "Total HRs",
+                    "value": format_metric_value(filtered["hr_count"].fillna(0).sum()),
+                    "helper": "Home runs across the filtered games",
+                },
+                {
+                    "label": "Longest HR",
+                    "value": f"{format_metric_value(filtered['longest_hr_ft'].max())} ft",
+                    "helper": "Longest home run in this filtered set",
+                },
+                {
+                    "label": "Hardest-hit ball",
+                    "value": f"{format_metric_value(filtered['hardest_hit_ball_mph'].max())} mph",
+                    "helper": "Peak exit velocity across the filtered games",
+                },
+            ]
+        )
+
+        with st.container(border=True):
+            render_section_heading("Season Game Log", "Sorted newest to oldest for a quick read on the recent run of games.")
+            st.markdown(
+                render_highlight_table(
+                    filtered.rename(
+                        columns={
+                            "game_date": "Date",
+                            "opponent": "Opponent",
+                            "venue_name": "Ballpark",
+                            "result_text": "Result",
+                            "hr_count": "HRs",
+                            "longest_hr_ft": "Longest HR (ft)",
+                            "hardest_hit_ball_mph": "Hardest-hit Ball (mph)",
+                        }
+                    ),
+                    emphasis_columns=["Date", "Opponent", "Result", "HRs"],
+                    secondary_columns=["Ballpark", "Longest HR (ft)", "Hardest-hit Ball (mph)"],
+                ),
+                unsafe_allow_html=True,
             )
-        ),
-        unsafe_allow_html=True,
-    )
