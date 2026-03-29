@@ -20,7 +20,7 @@ config = get_config()
 conn = get_connection(config.db_path)
 initialize_database(conn)
 
-st.title("Player Summary")
+st.title("Hitter Profiles")
 st.caption("Pick a Phillies hitter to see a simple home run and power snapshot.")
 
 players = get_player_options(conn)
