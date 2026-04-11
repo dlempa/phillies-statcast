@@ -14,7 +14,12 @@ from phillies_stats.dashboard_page import render_hitter_dashboard
 from phillies_stats.home_page import render_home
 
 
-st.set_page_config(page_title="Phillies Statcast 2026", page_icon=":baseball:", layout="wide")
+st.set_page_config(
+    page_title="Phillies Statcast 2026",
+    page_icon=":baseball:",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 hitter_dashboard_page = st.Page(
     render_hitter_dashboard,

@@ -134,20 +134,21 @@ def create_views(conn: duckdb.DuckDBPyConnection) -> None:
         """
         CREATE OR REPLACE VIEW phillies_home_runs AS
         SELECT
-            event_id,
-            game_pk,
-            game_date,
-            opponent,
-            venue_name,
-            batter_id,
-            batter_name,
-            launch_speed,
-            launch_angle,
-            hit_distance_sc,
-            CASE WHEN home_team = 'PHI' THEN 'Home' ELSE 'Away' END AS home_away
-        FROM statcast_events
-        WHERE is_home_run = TRUE
-          AND is_phillies_batter = TRUE;
+            e.event_id,
+            e.game_pk,
+            e.game_date,
+            e.opponent,
+            e.venue_name,
+            e.batter_id,
+            COALESCE(p.player_name, e.batter_name) AS batter_name,
+            e.launch_speed,
+            e.launch_angle,
+            e.hit_distance_sc,
+            CASE WHEN e.home_team = 'PHI' THEN 'Home' ELSE 'Away' END AS home_away
+        FROM statcast_events e
+        LEFT JOIN players p ON e.batter_id = p.player_id
+        WHERE e.is_home_run = TRUE
+          AND e.is_phillies_batter = TRUE;
 
         CREATE OR REPLACE VIEW longest_home_runs AS
         SELECT
@@ -180,20 +181,21 @@ def create_views(conn: duckdb.DuckDBPyConnection) -> None:
 
         CREATE OR REPLACE VIEW hardest_hit_balls_overall AS
         SELECT
-            batter_name AS player_name,
-            game_date,
-            opponent,
-            venue_name,
-            COALESCE(events, description) AS outcome,
-            launch_speed AS exit_velocity_mph,
-            launch_angle,
-            hit_distance_sc AS distance_ft
-        FROM statcast_events
-        WHERE is_phillies_batter = TRUE
-          AND batter_name IS NOT NULL
-          AND TRIM(batter_name) <> ''
-          AND launch_speed IS NOT NULL
-        ORDER BY launch_speed DESC, game_date ASC, event_id ASC;
+            COALESCE(p.player_name, e.batter_name) AS player_name,
+            e.game_date,
+            e.opponent,
+            e.venue_name,
+            COALESCE(e.events, e.description) AS outcome,
+            e.launch_speed AS exit_velocity_mph,
+            e.launch_angle,
+            e.hit_distance_sc AS distance_ft
+        FROM statcast_events e
+        LEFT JOIN players p ON e.batter_id = p.player_id
+        WHERE e.is_phillies_batter = TRUE
+          AND e.batter_name IS NOT NULL
+          AND TRIM(e.batter_name) <> ''
+          AND e.launch_speed IS NOT NULL
+        ORDER BY e.launch_speed DESC, e.game_date ASC, e.event_id ASC;
 
         CREATE OR REPLACE VIEW player_home_run_summary AS
         WITH player_hard_hit AS (
@@ -242,81 +244,87 @@ def create_views(conn: duckdb.DuckDBPyConnection) -> None:
 
         CREATE OR REPLACE VIEW strikeout_leaders AS
         SELECT
-            pitcher_id,
-            pitcher_name AS player_name,
+            e.pitcher_id,
+            COALESCE(p.player_name, e.pitcher_name) AS player_name,
             COUNT(*) AS strikeouts
-        FROM statcast_events
-        WHERE is_phillies_pitcher = TRUE
-          AND is_strikeout = TRUE
-        GROUP BY pitcher_id, pitcher_name
+        FROM statcast_events e
+        LEFT JOIN players p ON e.pitcher_id = p.player_id
+        WHERE e.is_phillies_pitcher = TRUE
+          AND e.is_strikeout = TRUE
+        GROUP BY e.pitcher_id, COALESCE(p.player_name, e.pitcher_name)
         ORDER BY strikeouts DESC, player_name ASC;
 
         CREATE OR REPLACE VIEW fastest_pitches AS
         SELECT
-            pitcher_id,
-            pitcher_name AS player_name,
-            game_date,
-            opponent,
-            venue_name,
-            pitch_name,
-            release_speed
-        FROM statcast_events
-        WHERE is_phillies_pitcher = TRUE
-          AND release_speed IS NOT NULL
-        ORDER BY release_speed DESC, game_date ASC, player_name ASC;
+            e.pitcher_id,
+            COALESCE(p.player_name, e.pitcher_name) AS player_name,
+            e.game_date,
+            e.opponent,
+            e.venue_name,
+            e.pitch_name,
+            e.release_speed
+        FROM statcast_events e
+        LEFT JOIN players p ON e.pitcher_id = p.player_id
+        WHERE e.is_phillies_pitcher = TRUE
+          AND e.release_speed IS NOT NULL
+        ORDER BY e.release_speed DESC, e.game_date ASC, player_name ASC;
 
         CREATE OR REPLACE VIEW pitcher_event_summary AS
         SELECT
-            pitcher_id,
-            pitcher_name AS player_name,
-            COUNT(DISTINCT game_pk) AS appearances,
-            SUM(CASE WHEN is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts,
-            SUM(CASE WHEN events IN ('walk', 'intent_walk') THEN 1 ELSE 0 END) AS walks_issued,
-            SUM(CASE WHEN events = 'home_run' THEN 1 ELSE 0 END) AS home_runs_allowed,
-            SUM(CASE WHEN description IN ('swinging_strike', 'swinging_strike_blocked') THEN 1 ELSE 0 END) AS whiffs,
-            MAX(launch_speed) AS hardest_hit_allowed_mph,
-            MAX(release_speed) AS max_velocity_mph,
-            ROUND(AVG(CASE WHEN pitch_name IN ('4-Seam Fastball', 'Sinker', 'Cutter') THEN release_speed END), 2)
+            e.pitcher_id,
+            COALESCE(p.player_name, e.pitcher_name) AS player_name,
+            COUNT(DISTINCT e.game_pk) AS appearances,
+            SUM(CASE WHEN e.is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts,
+            SUM(CASE WHEN e.events IN ('walk', 'intent_walk') THEN 1 ELSE 0 END) AS walks_issued,
+            SUM(CASE WHEN e.events = 'home_run' THEN 1 ELSE 0 END) AS home_runs_allowed,
+            SUM(CASE WHEN e.description IN ('swinging_strike', 'swinging_strike_blocked') THEN 1 ELSE 0 END) AS whiffs,
+            MAX(e.launch_speed) AS hardest_hit_allowed_mph,
+            MAX(e.release_speed) AS max_velocity_mph,
+            ROUND(AVG(CASE WHEN e.pitch_name IN ('4-Seam Fastball', 'Sinker', 'Cutter') THEN e.release_speed END), 2)
                 AS avg_fastball_velocity_mph
-        FROM statcast_events
-        WHERE is_phillies_pitcher = TRUE
-          AND pitcher_name IS NOT NULL
-        GROUP BY pitcher_id, pitcher_name
+        FROM statcast_events e
+        LEFT JOIN players p ON e.pitcher_id = p.player_id
+        WHERE e.is_phillies_pitcher = TRUE
+          AND e.pitcher_name IS NOT NULL
+        GROUP BY e.pitcher_id, COALESCE(p.player_name, e.pitcher_name)
         ORDER BY strikeouts DESC, player_name ASC;
 
         CREATE OR REPLACE VIEW pitcher_strikeouts_by_month AS
         SELECT
-            pitcher_name AS player_name,
-            DATE_TRUNC('month', game_date) AS month_start,
-            SUM(CASE WHEN is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts
-        FROM statcast_events
-        WHERE is_phillies_pitcher = TRUE
-          AND pitcher_name IS NOT NULL
-        GROUP BY pitcher_name, DATE_TRUNC('month', game_date)
+            COALESCE(p.player_name, e.pitcher_name) AS player_name,
+            DATE_TRUNC('month', e.game_date) AS month_start,
+            SUM(CASE WHEN e.is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts
+        FROM statcast_events e
+        LEFT JOIN players p ON e.pitcher_id = p.player_id
+        WHERE e.is_phillies_pitcher = TRUE
+          AND e.pitcher_name IS NOT NULL
+        GROUP BY COALESCE(p.player_name, e.pitcher_name), DATE_TRUNC('month', e.game_date)
         ORDER BY month_start ASC, strikeouts DESC, player_name ASC;
 
         CREATE OR REPLACE VIEW pitcher_strikeouts_by_opponent AS
         SELECT
-            pitcher_name AS player_name,
-            opponent,
-            SUM(CASE WHEN is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts
-        FROM statcast_events
-        WHERE is_phillies_pitcher = TRUE
-          AND pitcher_name IS NOT NULL
-        GROUP BY pitcher_name, opponent
+            COALESCE(p.player_name, e.pitcher_name) AS player_name,
+            e.opponent,
+            SUM(CASE WHEN e.is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts
+        FROM statcast_events e
+        LEFT JOIN players p ON e.pitcher_id = p.player_id
+        WHERE e.is_phillies_pitcher = TRUE
+          AND e.pitcher_name IS NOT NULL
+        GROUP BY COALESCE(p.player_name, e.pitcher_name), e.opponent
         ORDER BY strikeouts DESC, player_name ASC, opponent ASC;
 
         CREATE OR REPLACE VIEW pitcher_pitch_usage AS
         SELECT
-            pitcher_name AS player_name,
-            pitch_name,
+            COALESCE(p.player_name, e.pitcher_name) AS player_name,
+            e.pitch_name,
             COUNT(*) AS pitch_count,
-            ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY pitcher_name), 2) AS usage_pct
-        FROM statcast_events
-        WHERE is_phillies_pitcher = TRUE
-          AND pitcher_name IS NOT NULL
-          AND pitch_name IS NOT NULL
-        GROUP BY pitcher_name, pitch_name
+            ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY COALESCE(p.player_name, e.pitcher_name)), 2) AS usage_pct
+        FROM statcast_events e
+        LEFT JOIN players p ON e.pitcher_id = p.player_id
+        WHERE e.is_phillies_pitcher = TRUE
+          AND e.pitcher_name IS NOT NULL
+          AND e.pitch_name IS NOT NULL
+        GROUP BY COALESCE(p.player_name, e.pitcher_name), e.pitch_name
         ORDER BY player_name ASC, pitch_count DESC, pitch_name ASC;
 
         CREATE OR REPLACE VIEW pitcher_season_overview AS

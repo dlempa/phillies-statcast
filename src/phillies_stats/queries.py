@@ -582,14 +582,15 @@ def get_team_pitcher_velocity_trend(conn: duckdb.DuckDBPyConnection) -> pd.DataF
     frame = conn.execute(
         """
         SELECT
-            game_date,
-            pitcher_name AS player_name,
-            MAX(release_speed) AS max_velocity_mph
-        FROM statcast_events
-        WHERE is_phillies_pitcher = TRUE
-          AND release_speed IS NOT NULL
-          AND pitcher_name IS NOT NULL
-        GROUP BY game_date, pitcher_name
+            e.game_date,
+            COALESCE(p.player_name, e.pitcher_name) AS player_name,
+            MAX(e.release_speed) AS max_velocity_mph
+        FROM statcast_events e
+        LEFT JOIN players p ON e.pitcher_id = p.player_id
+        WHERE e.is_phillies_pitcher = TRUE
+          AND e.release_speed IS NOT NULL
+          AND e.pitcher_name IS NOT NULL
+        GROUP BY e.game_date, COALESCE(p.player_name, e.pitcher_name)
         ORDER BY game_date ASC, max_velocity_mph DESC
         """
     ).df()
