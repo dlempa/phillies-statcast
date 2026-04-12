@@ -88,7 +88,7 @@ else:
 
         with st.container(border=True):
             render_section_heading("Season Game Log", "Sorted newest to oldest for a quick read on the recent run of games.")
-            st.markdown(
+            st.html(
                 render_highlight_table(
                     filtered.rename(
                         columns={
@@ -104,5 +104,4 @@ else:
                     emphasis_columns=["Date", "Opponent", "Result", "HRs"],
                     secondary_columns=["Ballpark", "Longest HR (ft)", "Hardest-hit Ball (mph)"],
                 ),
-                unsafe_allow_html=True,
             )

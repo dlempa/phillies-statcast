@@ -113,13 +113,12 @@ def render_hitter_dashboard() -> None:
                         "launch_angle": "Launch Angle",
                     }
                 )
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         preview,
                         emphasis_columns=["Rank", "Player", "Distance (ft)"],
                         secondary_columns=["Exit Velocity (mph)", "Launch Angle", "Home/Away"],
                     ),
-                    unsafe_allow_html=True,
                 )
 
     secondary_left, secondary_right = st.columns(2)
@@ -130,7 +129,7 @@ def render_hitter_dashboard() -> None:
             if hardest_home_runs.empty:
                 st.info("Hard-hit home run data is not available yet.")
             else:
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         hardest_home_runs.rename(
                             columns={
@@ -144,7 +143,6 @@ def render_hitter_dashboard() -> None:
                         emphasis_columns=["Player", "Exit Velocity (mph)"],
                         secondary_columns=["Date", "Opponent"],
                     ),
-                    unsafe_allow_html=True,
                 )
 
     with secondary_right:
@@ -153,7 +151,7 @@ def render_hitter_dashboard() -> None:
             if player_distance.empty:
                 st.info("Player power summaries will appear after home run data is loaded.")
             else:
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         player_distance.rename(
                             columns={
@@ -166,7 +164,6 @@ def render_hitter_dashboard() -> None:
                         emphasis_columns=["Player", "Longest HR (ft)"],
                         secondary_columns=["Average Distance (ft)"],
                     ),
-                    unsafe_allow_html=True,
                 )
 
 

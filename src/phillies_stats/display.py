@@ -115,7 +115,7 @@ def _render_html_table(
             if normalized in {"rank", "hr", "hrnumber"}:
                 cell_classes.append("cell-rank")
             class_attr = f" class='{' '.join(cell_classes)}'" if cell_classes else ""
-            display_value = "—" if value is None or value is pd.NA else escape(str(value))
+            display_value = "&mdash;" if value is None or value is pd.NA else escape(str(value))
             row_cells.append(f"<td{class_attr}>{display_value}</td>")
         body_rows.append(f"<tr>{''.join(row_cells)}</tr>")
 

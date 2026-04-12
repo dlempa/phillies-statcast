@@ -17,6 +17,7 @@ from phillies_stats.database import get_connection, initialize_database
 from phillies_stats.display import render_highlight_table
 from phillies_stats.queries import get_pitcher_options, get_pitcher_profile
 from phillies_stats.ui import (
+    PHILLIES_RED,
     apply_app_theme,
     format_card,
     render_filter_caption,
@@ -44,7 +45,7 @@ if not pitchers:
     st.info("No Phillies pitcher profiles are available yet.")
 else:
     with st.container(border=True):
-        render_section_heading("Filter", "Select a Phillies pitcher to update the profile below.")
+        render_section_heading("Select a Pitcher", "Choose a Phillies pitcher to update the profile below.")
         render_filter_caption("Pitcher selector")
         selected_pitcher = st.selectbox("Pitcher", options=pitchers, label_visibility="collapsed")
 
@@ -119,7 +120,7 @@ else:
                     else:
                         usage_chart = style_chart(
                             alt.Chart(pitch_usage)
-                            .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, color="#c73c50")
+                            .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, color=PHILLIES_RED)
                             .encode(
                                 x=alt.X("pitch_name:N", title="Pitch Type", sort="-y"),
                                 y=alt.Y("usage_pct:Q", title="Usage %"),
@@ -132,7 +133,7 @@ else:
                             height=300,
                         )
                         st.altair_chart(usage_chart, use_container_width=True)
-                        st.markdown(
+                        st.html(
                             render_highlight_table(
                                 pitch_usage.rename(
                                     columns={
@@ -144,7 +145,6 @@ else:
                                 emphasis_columns=["Pitch Type", "Usage %"],
                                 secondary_columns=["Pitch Count"],
                             ),
-                            unsafe_allow_html=True,
                         )
 
         with velocity_tab:
@@ -163,7 +163,7 @@ else:
                 if fastest_pitches.empty:
                     st.info("No pitch-level velocity data is available for this pitcher yet.")
                 else:
-                    st.markdown(
+                    st.html(
                         render_highlight_table(
                             fastest_pitches.rename(
                                 columns={
@@ -176,7 +176,6 @@ else:
                             emphasis_columns=["Date", "Velocity (mph)"],
                             secondary_columns=["Opponent", "Pitch Type"],
                         ),
-                        unsafe_allow_html=True,
                     )
 
         with outcomes_tab:
@@ -207,12 +206,11 @@ else:
                     {"Metric": "Saves", "Value": format_card(saves)},
                     ]
                 )
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         outcome_table,
                         emphasis_columns=["Metric", "Value"],
                     ),
-                    unsafe_allow_html=True,
                 )
 
         with splits_tab:
@@ -227,7 +225,7 @@ else:
                     else:
                         month_chart = style_chart(
                             alt.Chart(strikeouts_by_month)
-                            .mark_bar(size=42, color="#c73c50")
+                            .mark_bar(size=42, color=PHILLIES_RED)
                             .encode(
                                 x=alt.X("month_start:T", title="Month"),
                                 y=alt.Y("strikeouts:Q", title="Strikeouts"),
@@ -242,15 +240,14 @@ else:
 
             with split_right:
                 with st.container(border=True):
-                    render_section_heading("Strikeouts By Opponent", "How the selected pitcher’s strikeouts stack up by opponent.")
+                    render_section_heading("Strikeouts By Opponent", "How the selected pitcher's strikeouts stack up by opponent.")
                     strikeouts_by_opponent = profile["strikeouts_by_opponent"]
                     if strikeouts_by_opponent.empty:
                         st.info("No opponent strikeout data is available for this pitcher yet.")
                     else:
-                        st.markdown(
+                        st.html(
                             render_highlight_table(
                                 strikeouts_by_opponent.rename(columns={"opponent": "Opponent", "strikeouts": "Strikeouts"}),
                                 emphasis_columns=["Opponent", "Strikeouts"],
                             ),
-                            unsafe_allow_html=True,
                         )

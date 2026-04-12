@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import mimetypes
+from base64 import b64encode
 from datetime import date, datetime
 from html import escape
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
@@ -9,101 +12,131 @@ import streamlit as st
 
 from phillies_stats.display import format_metric_value
 
+PHILLIES_RED = "#E81828"
+PHILLIES_RED_DARK = "#C1121F"
+PHILLIES_TEXT = "#1F2933"
+PHILLIES_MUTED = "#6B7280"
+PHILLIES_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "primary_logo.png"
+
 APP_CSS = """
 <style>
 :root {
-    --ph-bg: #08111c;
-    --ph-bg-alt: #101a28;
-    --ph-panel: rgba(15, 24, 38, 0.92);
-    --ph-panel-soft: rgba(20, 31, 47, 0.82);
-    --ph-border: rgba(255, 255, 255, 0.08);
-    --ph-border-strong: rgba(199, 60, 80, 0.28);
-    --ph-text: #f4f7fb;
-    --ph-muted: #95a3b9;
-    --ph-accent: #c73c50;
-    --ph-accent-soft: rgba(199, 60, 80, 0.14);
-    --ph-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+    --ph-bg: #ffffff;
+    --ph-bg-alt: #f6f8fa;
+    --ph-panel: #ffffff;
+    --ph-panel-soft: #f8fafc;
+    --ph-border: #e5e7eb;
+    --ph-border-strong: rgba(232, 24, 40, 0.34);
+    --ph-text: #1f2933;
+    --ph-muted: #6b7280;
+    --ph-muted-soft: #9ca3af;
+    --ph-accent: #e81828;
+    --ph-accent-dark: #c1121f;
+    --ph-accent-soft: rgba(232, 24, 40, 0.08);
+    --ph-shadow: 0 8px 22px rgba(31, 41, 51, 0.07);
 }
 
 .stApp {
-    background:
-        radial-gradient(circle at top right, rgba(199, 60, 80, 0.11), transparent 30%),
-        radial-gradient(circle at top left, rgba(71, 115, 183, 0.10), transparent 26%),
-        linear-gradient(180deg, #08111c 0%, #0a1522 100%);
+    background: var(--ph-bg);
     color: var(--ph-text);
 }
 
 [data-testid="stAppViewContainer"] > .main,
 [data-testid="stAppViewContainer"] > .main > div {
-    background: transparent;
+    background: var(--ph-bg);
 }
 
 header[data-testid="stHeader"] {
     background: transparent;
+    border-bottom: 0;
+    height: 0;
+    pointer-events: none;
 }
 
-div[data-testid="stToolbar"],
+header[data-testid="stHeader"] * {
+    pointer-events: auto;
+}
+
 div[data-testid="stDecoration"],
 footer {
     display: none;
 }
 
+div[data-testid="stToolbar"] {
+    visibility: visible;
+    pointer-events: auto;
+}
+
+button[title*="sidebar"],
+button[title*="Sidebar"],
+button[aria-label*="sidebar"],
+button[aria-label*="Sidebar"] {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    color: var(--ph-accent-dark) !important;
+    background: #ffffff !important;
+    border: 1px solid var(--ph-border) !important;
+    border-radius: 8px !important;
+}
+
 .block-container {
-    padding-top: 1.65rem;
-    padding-bottom: 3rem;
-    max-width: 1440px;
+    padding-top: 1.25rem;
+    padding-bottom: 2.25rem;
+    max-width: 1360px;
 }
 
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, rgba(8, 17, 28, 0.98) 0%, rgba(13, 22, 35, 0.98) 100%);
+    background: #fbfcfd;
     border-right: 1px solid var(--ph-border);
 }
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {
-    padding-top: 1rem;
+    padding-top: 0.75rem;
 }
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a {
-    border-radius: 14px;
-    margin-bottom: 0.25rem;
-    color: #dce4f2;
+    border-radius: 8px;
+    margin-bottom: 0.2rem;
+    color: var(--ph-text);
+    font-weight: 600;
 }
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--ph-panel-soft);
 }
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="page"] {
-    background: rgba(199, 60, 80, 0.16);
+    background: var(--ph-accent-soft);
     border: 1px solid var(--ph-border-strong);
-    color: var(--ph-text);
+    color: var(--ph-accent-dark);
 }
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] > div > p {
     color: var(--ph-muted);
     font-size: 0.76rem;
-    letter-spacing: 0.12em;
+    letter-spacing: 0;
     text-transform: uppercase;
-    margin-top: 1.2rem;
+    margin-top: 1rem;
 }
 
 div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: linear-gradient(180deg, rgba(16, 26, 40, 0.94) 0%, rgba(13, 22, 35, 0.94) 100%);
+    background: var(--ph-panel);
     border: 1px solid var(--ph-border) !important;
-    border-radius: 24px;
-    box-shadow: var(--ph-shadow);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(31, 41, 51, 0.04);
 }
 
 div[data-testid="stVerticalBlockBorderWrapper"] > div {
-    padding: 0.35rem 0.4rem;
+    padding: 0.15rem 0.2rem;
 }
 
 div[data-testid="stMetric"] {
-    background: linear-gradient(180deg, rgba(16, 26, 40, 0.95) 0%, rgba(12, 20, 32, 0.95) 100%);
+    background: var(--ph-panel);
     border: 1px solid var(--ph-border);
-    border-radius: 20px;
-    padding: 0.55rem 0.85rem;
-    box-shadow: var(--ph-shadow);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    box-shadow: 0 1px 2px rgba(31, 41, 51, 0.04);
 }
 
 div[data-testid="stMetricLabel"] p {
@@ -117,16 +150,16 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"] {
 label[data-testid="stWidgetLabel"] p {
     color: var(--ph-muted);
     font-size: 0.82rem;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
     text-transform: uppercase;
 }
 
 div[data-baseweb="select"] > div,
 div[data-baseweb="base-input"] > div {
-    background: rgba(16, 26, 40, 0.88);
+    background: #ffffff;
     border: 1px solid var(--ph-border);
-    border-radius: 16px;
-    min-height: 3rem;
+    border-radius: 8px;
+    min-height: 2.7rem;
 }
 
 div[data-baseweb="select"] svg {
@@ -134,134 +167,168 @@ div[data-baseweb="select"] svg {
 }
 
 div.stButton > button {
-    min-height: 3rem;
-    border-radius: 16px;
-    background: linear-gradient(180deg, rgba(199, 60, 80, 0.92) 0%, rgba(164, 42, 59, 0.94) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: 2.75rem;
+    border-radius: 8px;
+    background: var(--ph-accent);
+    border: 1px solid var(--ph-accent);
     color: white;
     font-weight: 600;
-    box-shadow: var(--ph-shadow);
+    box-shadow: 0 4px 10px rgba(232, 24, 40, 0.14);
 }
 
 div.stButton > button:hover {
-    border-color: rgba(255, 255, 255, 0.12);
-    filter: brightness(1.04);
+    background: var(--ph-accent-dark);
+    border-color: var(--ph-accent-dark);
+    color: white;
 }
 
 .page-hero {
-    background:
-        linear-gradient(135deg, rgba(199, 60, 80, 0.18) 0%, rgba(199, 60, 80, 0.06) 36%, rgba(16, 26, 40, 0.96) 100%),
-        linear-gradient(180deg, rgba(16, 26, 40, 0.95) 0%, rgba(11, 19, 31, 0.95) 100%);
+    background: var(--ph-panel);
     border: 1px solid var(--ph-border);
-    border-radius: 28px;
-    padding: 1.6rem 1.7rem;
-    margin-bottom: 1.25rem;
+    border-left: 5px solid var(--ph-accent);
+    border-radius: 8px;
+    padding: 1.15rem 1.25rem;
+    margin-bottom: 1rem;
     box-shadow: var(--ph-shadow);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.page-hero-main {
+    min-width: 0;
 }
 
 .page-eyebrow {
     color: var(--ph-muted);
     font-size: 0.76rem;
-    letter-spacing: 0.16em;
+    letter-spacing: 0;
     text-transform: uppercase;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.45rem;
+    font-weight: 700;
 }
 
 .page-title {
     color: var(--ph-text);
-    font-family: "Aptos Display", "Trebuchet MS", "Segoe UI", sans-serif;
-    font-size: clamp(2rem, 3vw, 3.1rem);
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: 2.35rem;
     font-weight: 700;
-    line-height: 1.05;
+    line-height: 1.08;
     margin: 0;
 }
 
 .page-subtitle {
     color: var(--ph-muted);
     font-size: 1rem;
-    line-height: 1.7;
-    margin-top: 0.7rem;
-    max-width: 58rem;
+    line-height: 1.55;
+    margin-top: 0.55rem;
+    max-width: 56rem;
 }
 
 .page-meta {
-    color: #d7deea;
-    margin-top: 1rem;
+    color: var(--ph-accent-dark);
+    margin-top: 0.85rem;
     display: inline-flex;
-    gap: 0.4rem;
+    gap: 0.35rem;
     align-items: center;
     font-size: 0.92rem;
-    padding: 0.45rem 0.8rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--ph-border);
-    border-radius: 999px;
+    padding: 0.38rem 0.65rem;
+    background: var(--ph-accent-soft);
+    border: 1px solid var(--ph-border-strong);
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.phillies-mark {
+    width: 4.6rem;
+    height: 4.6rem;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--ph-accent);
+    border-radius: 8px;
+    color: var(--ph-accent);
+    background: #ffffff;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 3.3rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.phillies-logo-mark {
+    width: 5rem;
+    height: 5rem;
+    flex: 0 0 auto;
+    object-fit: contain;
 }
 
 .section-heading {
-    margin-bottom: 0.9rem;
+    margin-bottom: 0.55rem;
 }
 
 .section-heading h2 {
     color: var(--ph-text);
-    font-size: 1.08rem;
-    font-weight: 650;
+    font-size: 1.04rem;
+    font-weight: 700;
     margin: 0;
 }
 
 .section-heading p {
     color: var(--ph-muted);
     font-size: 0.92rem;
-    line-height: 1.6;
+    line-height: 1.45;
     margin: 0.3rem 0 0;
 }
 
 .filter-caption {
     color: var(--ph-muted);
     font-size: 0.82rem;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
     text-transform: uppercase;
     margin-bottom: 0.35rem;
+    font-weight: 700;
 }
 
 .stat-card {
-    background: linear-gradient(180deg, rgba(16, 26, 40, 0.98) 0%, rgba(11, 19, 31, 0.98) 100%);
+    background: var(--ph-panel);
     border: 1px solid var(--ph-border);
-    border-radius: 22px;
-    padding: 1rem 1.05rem;
-    min-height: 8.4rem;
+    border-radius: 8px;
+    padding: 0.75rem 0.8rem;
+    min-height: 6.45rem;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    box-shadow: var(--ph-shadow);
+    box-shadow: 0 1px 2px rgba(31, 41, 51, 0.04);
 }
 
 .stat-card--accent {
     border-color: var(--ph-border-strong);
-    background:
-        linear-gradient(180deg, rgba(199, 60, 80, 0.16) 0%, rgba(16, 26, 40, 0.98) 58%),
-        linear-gradient(180deg, rgba(16, 26, 40, 0.98) 0%, rgba(11, 19, 31, 0.98) 100%);
+    background: var(--ph-accent-soft);
 }
 
 .stat-label {
     color: var(--ph-muted);
     font-size: 0.82rem;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
     text-transform: uppercase;
+    font-weight: 700;
 }
 
 .stat-value {
     color: var(--ph-text);
-    font-family: "Aptos Display", "Trebuchet MS", "Segoe UI", sans-serif;
-    font-size: clamp(1.6rem, 2.1vw, 2.45rem);
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: 1.7rem;
     font-weight: 700;
-    line-height: 1.08;
-    margin-top: 0.6rem;
+    line-height: 1.12;
+    margin-top: 0.45rem;
 }
 
 .stat-helper {
-    color: #d7deea;
+    color: var(--ph-muted);
     font-size: 0.92rem;
-    margin-top: 0.85rem;
+    margin-top: 0.65rem;
 }
 
 .profile-header {
@@ -273,8 +340,8 @@ div.stButton > button:hover {
 
 .profile-title {
     color: var(--ph-text);
-    font-family: "Aptos Display", "Trebuchet MS", "Segoe UI", sans-serif;
-    font-size: 2rem;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: 1.75rem;
     font-weight: 700;
     margin: 0;
 }
@@ -289,40 +356,43 @@ div.stButton > button:hover {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.45rem 0.8rem;
-    border-radius: 999px;
+    padding: 0.4rem 0.65rem;
+    border-radius: 8px;
     border: 1px solid var(--ph-border-strong);
     background: var(--ph-accent-soft);
-    color: #f8e8eb;
+    color: var(--ph-accent-dark);
     font-size: 0.84rem;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     text-transform: uppercase;
+    font-weight: 700;
 }
 
 .stTabs [data-baseweb="tab-list"] {
-    gap: 0.45rem;
-    background: rgba(255, 255, 255, 0.03);
+    gap: 0.3rem;
+    background: var(--ph-panel-soft);
     border: 1px solid var(--ph-border);
-    border-radius: 999px;
-    padding: 0.3rem;
-    margin-bottom: 1rem;
+    border-radius: 8px;
+    padding: 0.25rem;
+    margin-bottom: 0.9rem;
 }
 
 .stTabs [data-baseweb="tab"] {
-    border-radius: 999px;
+    border-radius: 8px;
     color: var(--ph-muted);
-    min-height: 2.6rem;
+    min-height: 2.45rem;
 }
 
 .stTabs [aria-selected="true"] {
-    background: rgba(199, 60, 80, 0.18) !important;
-    color: var(--ph-text) !important;
+    background: #ffffff !important;
+    color: var(--ph-accent-dark) !important;
+    box-shadow: 0 1px 2px rgba(31, 41, 51, 0.05);
 }
 
 .stAlert {
-    border-radius: 18px;
+    border-radius: 8px;
     border: 1px solid var(--ph-border);
-    background: rgba(16, 26, 40, 0.92);
+    background: var(--ph-panel-soft);
+    color: var(--ph-text);
 }
 
 .phillies-table-wrap {
@@ -333,24 +403,38 @@ table.phillies-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
+    background: #ffffff;
+    border: 1px solid var(--ph-border);
+    border-radius: 8px;
 }
 
 table.phillies-table thead th {
-    color: var(--ph-muted);
+    color: #ffffff;
     font-size: 0.75rem;
-    letter-spacing: 0.12em;
+    letter-spacing: 0;
     text-transform: uppercase;
-    font-weight: 600;
-    background: rgba(255, 255, 255, 0.03);
-    padding: 0.85rem 1rem;
-    border-bottom: 1px solid var(--ph-border);
+    font-weight: 700;
+    text-align: center;
+    background: var(--ph-accent-dark);
+    padding: 0.6rem 0.7rem;
+    border-bottom: 1px solid var(--ph-accent-dark);
+}
+
+table.phillies-table thead th:first-child {
+    border-top-left-radius: 8px;
+}
+
+table.phillies-table thead th:last-child {
+    border-top-right-radius: 8px;
 }
 
 table.phillies-table tbody td {
     color: var(--ph-text);
-    font-size: 0.95rem;
-    padding: 0.95rem 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.92rem;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0.62rem 0.7rem;
+    border-bottom: 1px solid var(--ph-border);
 }
 
 table.phillies-table tbody tr:last-child td {
@@ -358,11 +442,11 @@ table.phillies-table tbody tr:last-child td {
 }
 
 table.phillies-table tbody tr:hover td {
-    background: rgba(255, 255, 255, 0.02);
+    background: #fff8f8;
 }
 
 table.phillies-table .cell-emphasis {
-    color: #ffffff;
+    color: var(--ph-text);
     font-weight: 700;
 }
 
@@ -371,8 +455,21 @@ table.phillies-table .cell-secondary {
 }
 
 table.phillies-table .cell-rank {
-    color: #fcecef;
+    color: var(--ph-accent-dark);
     font-weight: 700;
+}
+
+@media (max-width: 760px) {
+    .block-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .page-hero {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
 }
 </style>
 """
@@ -382,42 +479,68 @@ def apply_app_theme() -> None:
     st.markdown(APP_CSS, unsafe_allow_html=True)
 
 
-def render_page_header(title: str, subtitle: str, *, eyebrow: str | None = None, meta: str | None = None) -> None:
+def _logo_data_uri() -> str | None:
+    if not PHILLIES_LOGO_PATH.exists():
+        return None
+
+    mime_type = mimetypes.guess_type(PHILLIES_LOGO_PATH)[0] or "image/png"
+    encoded_logo = b64encode(PHILLIES_LOGO_PATH.read_bytes()).decode("ascii")
+    return f"data:{mime_type};base64,{encoded_logo}"
+
+
+def render_logo_mark(label: str = "P") -> str:
+    logo_src = _logo_data_uri()
+    if logo_src:
+        return f"<img class='phillies-logo-mark' alt='Phillies logo' src='{logo_src}' />"
+
+    return f"<div class='phillies-mark' aria-label='Phillies visual mark'>{escape(label)}</div>"
+
+
+def render_page_header(
+    title: str,
+    subtitle: str,
+    *,
+    eyebrow: str | None = None,
+    meta: str | None = None,
+    show_mark: bool = False,
+) -> None:
     eyebrow_html = f"<div class='page-eyebrow'>{escape(eyebrow)}</div>" if eyebrow else ""
     meta_html = f"<div class='page-meta'>{escape(meta)}</div>" if meta else ""
-    st.markdown(
+    mark_html = render_logo_mark() if show_mark else ""
+    st.html(
         f"""
         <section class="page-hero">
-            {eyebrow_html}
-            <h1 class="page-title">{escape(title)}</h1>
-            <p class="page-subtitle">{escape(subtitle)}</p>
-            {meta_html}
+            <div class="page-hero-main">
+                {eyebrow_html}
+                <h1 class="page-title">{escape(title)}</h1>
+                <p class="page-subtitle">{escape(subtitle)}</p>
+                {meta_html}
+            </div>
+            {mark_html}
         </section>
         """,
-        unsafe_allow_html=True,
     )
 
 
 def render_section_heading(title: str, subtitle: str | None = None) -> None:
     subtitle_html = f"<p>{escape(subtitle)}</p>" if subtitle else ""
-    st.markdown(
+    st.html(
         f"""
         <div class="section-heading">
             <h2>{escape(title)}</h2>
             {subtitle_html}
         </div>
         """,
-        unsafe_allow_html=True,
     )
 
 
 def render_filter_caption(text: str) -> None:
-    st.markdown(f"<div class='filter-caption'>{escape(text)}</div>", unsafe_allow_html=True)
+    st.html(f"<div class='filter-caption'>{escape(text)}</div>")
 
 
 def render_profile_header(name: str, subtitle: str, chip: str | None = None) -> None:
     chip_html = f"<div class='profile-chip'>{escape(chip)}</div>" if chip else ""
-    st.markdown(
+    st.html(
         f"""
         <div class="profile-header">
             <div>
@@ -427,7 +550,6 @@ def render_profile_header(name: str, subtitle: str, chip: str | None = None) -> 
             {chip_html}
         </div>
         """,
-        unsafe_allow_html=True,
     )
 
 
@@ -443,7 +565,7 @@ def render_stat_cards(cards: list[dict[str, str | None]], *, columns: int | None
             helper = card.get("helper")
             helper_html = f"<div class='stat-helper'>{escape(str(helper))}</div>" if helper else ""
             with column:
-                st.markdown(
+                st.html(
                     f"""
                     <div class="stat-card stat-card--{escape(str(tone))}">
                         <div>
@@ -453,7 +575,6 @@ def render_stat_cards(cards: list[dict[str, str | None]], *, columns: int | None
                         {helper_html}
                     </div>
                     """,
-                    unsafe_allow_html=True,
                 )
 
 
@@ -462,22 +583,23 @@ def style_chart(chart: alt.Chart, *, height: int = 320) -> alt.Chart:
         chart.properties(height=height, background="transparent")
         .configure_view(strokeWidth=0)
         .configure_axis(
-            labelColor="#d7deea",
-            titleColor="#d7deea",
-            domainColor="rgba(255,255,255,0.14)",
-            gridColor="rgba(255,255,255,0.08)",
-            tickColor="rgba(255,255,255,0.12)",
+            labelColor=PHILLIES_MUTED,
+            titleColor=PHILLIES_MUTED,
+            domainColor="#D1D5DB",
+            gridColor="#EEF2F7",
+            tickColor="#E5E7EB",
         )
-        .configure_title(color="#f4f7fb", fontSize=16)
+        .configure_title(color=PHILLIES_TEXT, fontSize=16)
         .configure_legend(
-            titleColor="#d7deea",
-            labelColor="#d7deea",
+            titleColor=PHILLIES_MUTED,
+            labelColor=PHILLIES_MUTED,
             orient="bottom",
             padding=12,
             fillColor="transparent",
             strokeColor="transparent",
         )
-        .configure_header(labelColor="#d7deea", titleColor="#f4f7fb")
+        .configure_range(category=[PHILLIES_RED, PHILLIES_TEXT, PHILLIES_MUTED, "#9CA3AF", PHILLIES_RED_DARK])
+        .configure_header(labelColor=PHILLIES_MUTED, titleColor=PHILLIES_TEXT)
     )
 
 

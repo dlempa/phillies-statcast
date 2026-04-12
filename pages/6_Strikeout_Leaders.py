@@ -20,7 +20,7 @@ from phillies_stats.queries import (
     get_pitcher_strikeouts_by_month,
     get_pitcher_strikeouts_by_opponent,
 )
-from phillies_stats.ui import apply_app_theme, render_filter_caption, render_page_header, render_section_heading, render_stat_cards, style_chart
+from phillies_stats.ui import PHILLIES_RED, apply_app_theme, render_filter_caption, render_page_header, render_section_heading, render_stat_cards, style_chart
 
 
 config = get_config()
@@ -40,7 +40,7 @@ pitchers = get_pitcher_options(conn)
 selected_pitcher = None
 if pitchers:
     with st.container(border=True):
-        render_section_heading("Filter", "Select a pitcher to update the supporting split views below.")
+        render_section_heading("Select a Pitcher", "Choose a pitcher to update the supporting split views below.")
         render_filter_caption("Pitcher selector")
         selected_pitcher = st.selectbox("Pitcher", options=pitchers, label_visibility="collapsed")
 
@@ -78,7 +78,7 @@ else:
 
     with st.container(border=True):
         render_section_heading("Strikeout Leaderboard", "Strikeout totals are visually emphasized while the supporting context stays secondary.")
-        st.markdown(
+        st.html(
             render_highlight_table(
                 leaders.rename(
                     columns={
@@ -94,7 +94,6 @@ else:
                 emphasis_columns=["Pitcher", "Strikeouts"],
                 secondary_columns=["Role", "Appearances", "K per Appearance", "Walks", "HR Allowed"],
             ),
-            unsafe_allow_html=True,
         )
 
 if selected_pitcher:
@@ -110,7 +109,7 @@ if selected_pitcher:
                 month_chart = by_month.copy()
                 chart = style_chart(
                     alt.Chart(month_chart)
-                    .mark_bar(size=44, color="#c73c50")
+                    .mark_bar(size=44, color=PHILLIES_RED)
                     .encode(
                         x=alt.X("month_start:T", title="Month"),
                         y=alt.Y("strikeouts:Q", title="Strikeouts"),
@@ -131,10 +130,9 @@ if selected_pitcher:
             if by_opponent.empty:
                 st.info("No opponent strikeout breakdown is available for this pitcher yet.")
             else:
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         by_opponent.rename(columns={"opponent": "Opponent", "strikeouts": "Strikeouts"}),
                         emphasis_columns=["Opponent", "Strikeouts"],
                     ),
-                    unsafe_allow_html=True,
                 )
