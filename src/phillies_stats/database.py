@@ -124,6 +124,48 @@ def initialize_database(conn: duckdb.DuckDBPyConnection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (season, pitcher_name)
         );
+
+        CREATE TABLE IF NOT EXISTS league_stat_cutoffs (
+            season INTEGER NOT NULL,
+            as_of_date DATE NOT NULL,
+            player_group TEXT NOT NULL,
+            stat_key TEXT NOT NULL,
+            stat_label TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            pool_minimum_metric TEXT NOT NULL,
+            pool_minimum_value DOUBLE NOT NULL,
+            sample_size INTEGER NOT NULL,
+            p15 DOUBLE,
+            p40 DOUBLE,
+            p60 DOUBLE,
+            p75 DOUBLE,
+            p90 DOUBLE,
+            p95 DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (season, as_of_date, player_group, stat_key)
+        );
+
+        CREATE TABLE IF NOT EXISTS player_league_context_ratings (
+            season INTEGER NOT NULL,
+            as_of_date DATE NOT NULL,
+            player_name TEXT NOT NULL,
+            player_key TEXT NOT NULL,
+            team TEXT,
+            player_group TEXT NOT NULL,
+            baseline_group TEXT NOT NULL,
+            stat_key TEXT NOT NULL,
+            stat_label TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            stat_value DOUBLE,
+            league_percentile DOUBLE,
+            rating_tier TEXT,
+            mlb_qualified TEXT,
+            qualification_metric TEXT,
+            qualification_value DOUBLE,
+            qualification_minimum DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (season, as_of_date, player_key, player_group, stat_key)
+        );
         """
     )
     create_views(conn)
