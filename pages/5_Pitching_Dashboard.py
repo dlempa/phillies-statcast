@@ -101,7 +101,7 @@ with side_col:
             if strikeout_leaders.empty:
                 st.info("Pitcher strikeout data is not available yet.")
             else:
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         strikeout_leaders.rename(
                             columns={
@@ -117,14 +117,13 @@ with side_col:
                         emphasis_columns=["Pitcher", "Strikeouts"],
                         secondary_columns=["Role", "Appearances", "K per Appearance", "Walks", "HR Allowed"],
                     ),
-                    unsafe_allow_html=True,
                 )
 
         with velocity_tab:
             if fastest_pitches.empty:
                 st.info("Velocity data is not available yet.")
             else:
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         fastest_pitches.rename(
                             columns={
@@ -138,7 +137,6 @@ with side_col:
                         emphasis_columns=["Pitcher", "Velocity (mph)"],
                         secondary_columns=["Date", "Opponent", "Pitch Type"],
                     ),
-                    unsafe_allow_html=True,
                 )
 
 bottom_left, bottom_right = st.columns(2)
@@ -149,7 +147,7 @@ with bottom_left:
         if wins_leaders.empty:
             st.info("Pitcher season summary data is not available yet.")
         else:
-            st.markdown(
+            st.html(
                 render_highlight_table(
                     wins_leaders.rename(
                         columns={
@@ -164,7 +162,6 @@ with bottom_left:
                     emphasis_columns=["Pitcher", "Wins", "Innings Pitched"],
                     secondary_columns=["ERA", "WHIP", "Losses", "Position"],
                 ),
-                unsafe_allow_html=True,
             )
 
 with bottom_right:
@@ -176,7 +173,7 @@ with bottom_right:
             if walks_leaders.empty:
                 st.info("Walk data is not available yet.")
             else:
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         walks_leaders.rename(
                             columns={
@@ -189,14 +186,13 @@ with bottom_right:
                         emphasis_columns=["Pitcher", "Walks"],
                         secondary_columns=["Strikeouts", "Appearances", "Position"],
                     ),
-                    unsafe_allow_html=True,
                 )
 
         with damage_tab:
             if home_run_allowed.empty:
                 st.info("Home run allowed data is not available yet.")
             else:
-                st.markdown(
+                st.html(
                     render_highlight_table(
                         home_run_allowed.rename(
                             columns={
@@ -209,5 +205,4 @@ with bottom_right:
                         emphasis_columns=["Pitcher", "HR Allowed"],
                         secondary_columns=["Walks", "Strikeouts", "Position"],
                     ),
-                    unsafe_allow_html=True,
                 )

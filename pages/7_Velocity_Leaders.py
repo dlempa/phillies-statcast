@@ -15,7 +15,7 @@ from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
 from phillies_stats.display import format_metric_value, render_highlight_table
 from phillies_stats.queries import get_fastest_pitches, get_pitcher_velocity_summary
-from phillies_stats.ui import apply_app_theme, render_page_header, render_section_heading, render_stat_cards, style_chart
+from phillies_stats.ui import PHILLIES_RED, apply_app_theme, render_page_header, render_section_heading, render_stat_cards, style_chart
 
 
 config = get_config()
@@ -79,7 +79,7 @@ if not fastest_pitches.empty:
             "Top 10 Fastest Pitches",
             "Pitcher, date, opponent, pitch type, and raw velocity are visually foregrounded here.",
         )
-        st.markdown(
+        st.html(
             render_highlight_table(
                 fastest_pitches.rename(
                     columns={
@@ -93,7 +93,6 @@ if not fastest_pitches.empty:
                 emphasis_columns=["Pitcher", "Velocity (mph)"],
                 secondary_columns=["Date", "Opponent", "Pitch Type"],
             ),
-            unsafe_allow_html=True,
         )
 
 summary_left, summary_right = st.columns([1.15, 1])
@@ -106,7 +105,7 @@ with summary_left:
         else:
             chart = style_chart(
                 alt.Chart(velocity_summary)
-                .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, color="#c73c50")
+                .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, color=PHILLIES_RED)
                 .encode(
                     x=alt.X("player_name:N", sort="-y", title="Pitcher"),
                     y=alt.Y("max_velocity_mph:Q", title="Max Velocity (mph)"),
@@ -138,11 +137,10 @@ with summary_right:
                     "avg_fastball_velocity_mph": "Average Fastball Velocity (mph)",
                 }
             )
-            st.markdown(
+            st.html(
                 render_highlight_table(
                     display,
                     emphasis_columns=["Pitcher", "Max Velocity (mph)"],
                     secondary_columns=["Average Fastball Velocity (mph)", "Role"],
                 ),
-                unsafe_allow_html=True,
             )

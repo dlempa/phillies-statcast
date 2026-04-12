@@ -16,6 +16,7 @@ from phillies_stats.database import get_connection, initialize_database
 from phillies_stats.display import render_highlight_table
 from phillies_stats.queries import get_player_options, get_player_summary
 from phillies_stats.ui import (
+    PHILLIES_RED,
     apply_app_theme,
     format_card,
     render_filter_caption,
@@ -43,7 +44,7 @@ if not players:
     st.info("No player summaries are available yet. Load some Statcast data first.")
 else:
     with st.container(border=True):
-        render_section_heading("Filter", "Pick a Phillies hitter to switch the profile view.")
+        render_section_heading("Select a Hitter", "Pick a Phillies hitter to switch the profile view.")
         render_filter_caption("Profile selector")
         selected_player = st.selectbox("Hitter", options=players, label_visibility="collapsed")
 
@@ -96,18 +97,17 @@ else:
                                 }
                             )
                         )
-                        st.markdown(
+                        st.html(
                             render_highlight_table(
                                 recent_home_runs[["HR #", "Date", "Opponent", "Distance (ft)", "Exit Velocity (mph)"]],
                                 emphasis_columns=["HR #", "Distance (ft)"],
                                 secondary_columns=["Date", "Opponent"],
                             ),
-                            unsafe_allow_html=True,
                         )
 
             with right_panel:
                 with st.container(border=True):
-                    render_section_heading("Season Power Snapshot", "This player’s biggest home runs by distance.")
+                    render_section_heading("Season Power Snapshot", "This player's biggest home runs by distance.")
                     if home_runs.empty:
                         st.info("No power snapshot is available for this player yet.")
                     else:
@@ -124,13 +124,12 @@ else:
                                 }
                             )
                         )
-                        st.markdown(
+                        st.html(
                             render_highlight_table(
                                 power_snapshot[["HR #", "Date", "Distance (ft)", "Exit Velocity (mph)", "Launch Angle"]],
                                 emphasis_columns=["Distance (ft)", "Exit Velocity (mph)"],
                                 secondary_columns=["Launch Angle", "Date"],
                             ),
-                            unsafe_allow_html=True,
                         )
 
         with home_runs_tab:
@@ -150,13 +149,12 @@ else:
                             "launch_angle": "Launch Angle",
                         }
                     )
-                    st.markdown(
+                    st.html(
                         render_highlight_table(
                             display_home_runs,
                             emphasis_columns=["HR #", "Date", "Distance (ft)"],
                             secondary_columns=["Exit Velocity (mph)", "Launch Angle"],
                         ),
-                        unsafe_allow_html=True,
                     )
 
         with power_tab:
@@ -188,13 +186,12 @@ else:
                                 }
                             )
                         )
-                        st.markdown(
+                        st.html(
                             render_highlight_table(
                                 longest_home_runs[["HR #", "Date", "Opponent", "Distance (ft)", "Exit Velocity (mph)"]],
                                 emphasis_columns=["Distance (ft)", "HR #"],
                                 secondary_columns=["Date", "Opponent"],
                             ),
-                            unsafe_allow_html=True,
                         )
 
             with power_right:
@@ -216,13 +213,12 @@ else:
                                 }
                             )
                         )
-                        st.markdown(
+                        st.html(
                             render_highlight_table(
                                 hardest_home_runs[["HR #", "Date", "Opponent", "Exit Velocity (mph)", "Distance (ft)"]],
                                 emphasis_columns=["Exit Velocity (mph)", "HR #"],
                                 secondary_columns=["Date", "Opponent"],
                             ),
-                            unsafe_allow_html=True,
                         )
 
         with splits_tab:
@@ -237,7 +233,7 @@ else:
                         monthly_chart = monthly.copy()
                         chart = style_chart(
                             alt.Chart(monthly_chart)
-                            .mark_bar(size=42, color="#c73c50")
+                            .mark_bar(size=42, color=PHILLIES_RED)
                             .encode(
                                 x=alt.X("month_name:N", title="Month", sort=monthly_chart["month_name"].tolist()),
                                 y=alt.Y("home_run_count:Q", title="Home Runs"),
@@ -259,10 +255,9 @@ else:
                         chart_data = monthly.rename(columns={"month_name": "Month", "home_run_count": "Home Runs"})[
                             ["Month", "Home Runs"]
                         ]
-                        st.markdown(
+                        st.html(
                             render_highlight_table(
                                 chart_data,
                                 emphasis_columns=["Month", "Home Runs"],
                             ),
-                            unsafe_allow_html=True,
                         )

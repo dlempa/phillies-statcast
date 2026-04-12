@@ -101,11 +101,10 @@ else:
                 "launch_angle": "Launch Angle",
             }
         )
-        st.markdown(
+        st.html(
             render_highlight_table(
                 display,
                 emphasis_columns=["Rank", "Player", "Distance (ft)"],
                 secondary_columns=["Exit Velocity (mph)", "Launch Angle", "Home/Away"],
             ),
-            unsafe_allow_html=True,
         )

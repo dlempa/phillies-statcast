@@ -88,7 +88,7 @@ with top_left:
         if hardest_home_runs.empty:
             st.info("No home run data is available yet.")
         else:
-            st.markdown(
+            st.html(
                 render_highlight_table(
                     hardest_home_runs.rename(
                         columns={
@@ -104,7 +104,6 @@ with top_left:
                     emphasis_columns=["Player", "Exit Velocity (mph)"],
                     secondary_columns=["Launch Angle", "Ballpark"],
                 ),
-                unsafe_allow_html=True,
             )
 
 with top_right:
@@ -113,7 +112,7 @@ with top_right:
         if shortest_home_runs.empty:
             st.info("No home run data is available yet.")
         else:
-            st.markdown(
+            st.html(
                 render_highlight_table(
                     shortest_home_runs.rename(
                         columns={
@@ -129,7 +128,6 @@ with top_right:
                     emphasis_columns=["Player", "Distance (ft)"],
                     secondary_columns=["Launch Angle", "Ballpark"],
                 ),
-                unsafe_allow_html=True,
             )
 
 bottom_left, bottom_right = st.columns(2)
@@ -140,7 +138,7 @@ with bottom_left:
         if distance_stats.empty:
             st.info("Player distance summaries will appear after home run data is loaded.")
         else:
-            st.markdown(
+            st.html(
                 render_highlight_table(
                     distance_stats.rename(
                         columns={
@@ -153,7 +151,6 @@ with bottom_left:
                     emphasis_columns=["Player", "Max HR Distance (ft)"],
                     secondary_columns=["Average HR Distance (ft)"],
                 ),
-                unsafe_allow_html=True,
             )
 
 with bottom_right:
@@ -162,7 +159,7 @@ with bottom_right:
         if hardest_balls.empty:
             st.info("Hard-hit ball data will appear once events are ingested.")
         else:
-            st.markdown(
+            st.html(
                 render_highlight_table(
                     hardest_balls.rename(
                         columns={
@@ -179,5 +176,4 @@ with bottom_right:
                     emphasis_columns=["Player", "Exit Velocity (mph)"],
                     secondary_columns=["Outcome", "Launch Angle", "Distance (ft)"],
                 ),
-                unsafe_allow_html=True,
             )
