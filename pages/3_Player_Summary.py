@@ -52,9 +52,23 @@ else:
     summary = player_summary["summary"]
     monthly = player_summary["monthly"]
     home_runs = player_summary["home_runs"]
+    league_context = player_summary["league_context"]
 
     if not summary:
-        st.info("No summary is available for this player yet.")
+        with st.container(border=True):
+            render_profile_header(
+                selected_player,
+                "Current-season MLB context for the selected Phillies hitter.",
+                chip="Hitter Profile",
+            )
+            render_section_heading("League Context Ratings", "Current-season production compared with MLB hitter baselines.")
+            st.html(
+                render_highlight_table(
+                    league_context,
+                    emphasis_columns=["Stat", "Rating Tier"],
+                    secondary_columns=["League Percentile", "MLB Qualified?"],
+                ),
+            )
     else:
         hr_count, longest_hr, average_hr, hardest_hit_ball = summary
 
@@ -71,6 +85,16 @@ else:
                     {"label": "Average HR distance", "value": format_card(average_hr, " ft")},
                     {"label": "Hardest-hit ball", "value": format_card(hardest_hit_ball, " mph")},
                 ]
+            )
+
+        with st.container(border=True):
+            render_section_heading("League Context Ratings", "Current-season production compared with MLB hitter baselines.")
+            st.html(
+                render_highlight_table(
+                    league_context,
+                    emphasis_columns=["Stat", "Rating Tier"],
+                    secondary_columns=["League Percentile", "MLB Qualified?"],
+                ),
             )
 
         overview_tab, home_runs_tab, power_tab, splits_tab = st.tabs(["Overview", "Home Runs", "Power", "Splits"])

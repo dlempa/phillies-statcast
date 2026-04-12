@@ -8,6 +8,15 @@ import pandas as pd
 
 from phillies_stats.config import get_config
 from phillies_stats.display import format_player_name, normalize_player_key
+from phillies_stats.league_context import (
+    HITTER_STAT_DEFINITIONS,
+    PITCHER_STAT_DEFINITIONS,
+    PLAYER_GROUP_CLOSER,
+    PLAYER_GROUP_RELIEVER,
+    build_rating_display_frame,
+    derive_pitcher_group,
+    pitcher_position_to_group,
+)
 
 
 def get_last_updated(conn: duckdb.DuckDBPyConnection):
@@ -265,7 +274,9 @@ def get_player_summary(conn: duckdb.DuckDBPyConnection, player_name: str) -> dic
         [player_name],
     ).df()
 
-    return {"summary": hr_summary, "monthly": monthly, "home_runs": home_runs}
+    league_context = get_hitter_league_context_ratings(conn, player_name)
+
+    return {"summary": hr_summary, "monthly": monthly, "home_runs": home_runs, "league_context": league_context}
 
 
 def get_game_log(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
@@ -442,16 +453,8 @@ def _build_pitcher_overview(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 
 
 def _derive_pitcher_position(row: pd.Series) -> str:
-    saves = row.get("saves")
-    games_started = row.get("games_started")
-    games = row.get("games")
-    if pd.notna(saves) and saves > 0:
-        return "Closer"
-    if pd.notna(games_started) and games_started > 0:
-        if pd.notna(games) and games > 0 and games_started >= games / 2:
-            return "Starter"
-        return "Starter"
-    return "Reliever"
+    player_group = derive_pitcher_group(row.get("games_started"), row.get("games"), row.get("saves"))
+    return {"starter": "Starter", "reliever": "Reliever", "closer": "Closer"}.get(player_group, "Reliever")
 
 
 def _filter_pitcher_frame(frame: pd.DataFrame, player_name: str, column: str = "player_name") -> pd.DataFrame:
@@ -462,6 +465,102 @@ def _filter_pitcher_frame(frame: pd.DataFrame, player_name: str, column: str = "
     working["_player_key"] = working[column].map(normalize_player_key)
     filtered = working.loc[working["_player_key"].eq(target_key)].drop(columns=["_player_key"])
     return filtered
+
+
+def get_hitter_league_context_ratings(
+    conn: duckdb.DuckDBPyConnection,
+    player_name: str,
+    *,
+    season: int | None = None,
+) -> pd.DataFrame:
+    config = get_config(season)
+    raw_rows = _get_latest_league_context_rows(
+        conn,
+        player_name=player_name,
+        season=config.season,
+        player_groups=["hitter"],
+    )
+    return build_rating_display_frame(raw_rows, HITTER_STAT_DEFINITIONS)
+
+
+def get_pitcher_league_context_ratings(
+    conn: duckdb.DuckDBPyConnection,
+    player_name: str,
+    position: object = None,
+    *,
+    season: int | None = None,
+) -> pd.DataFrame:
+    config = get_config(season)
+    player_group = pitcher_position_to_group(position)
+    raw_rows = _get_latest_league_context_rows(
+        conn,
+        player_name=player_name,
+        season=config.season,
+        player_groups=[player_group],
+    )
+    if raw_rows.empty and player_group == PLAYER_GROUP_CLOSER:
+        raw_rows = _get_latest_league_context_rows(
+            conn,
+            player_name=player_name,
+            season=config.season,
+            player_groups=[PLAYER_GROUP_RELIEVER],
+        )
+    return build_rating_display_frame(raw_rows, PITCHER_STAT_DEFINITIONS)
+
+
+def _get_latest_league_context_rows(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    player_name: str,
+    season: int,
+    player_groups: list[str],
+) -> pd.DataFrame:
+    player_key = normalize_player_key(player_name)
+    if not player_key or not player_groups:
+        return pd.DataFrame()
+
+    placeholders = ", ".join(["?"] * len(player_groups))
+    latest_params: list[object] = [season, player_key, *player_groups]
+    latest_as_of = conn.execute(
+        f"""
+        SELECT MAX(as_of_date)
+        FROM player_league_context_ratings
+        WHERE season = ?
+          AND player_key = ?
+          AND player_group IN ({placeholders})
+        """,
+        latest_params,
+    ).fetchone()
+    if not latest_as_of or latest_as_of[0] is None:
+        return pd.DataFrame()
+
+    rows_params: list[object] = [season, latest_as_of[0], player_key, *player_groups]
+    return conn.execute(
+        f"""
+        SELECT
+            season,
+            as_of_date,
+            player_name,
+            player_group,
+            baseline_group,
+            stat_key,
+            stat_label,
+            direction,
+            stat_value,
+            league_percentile,
+            rating_tier,
+            mlb_qualified,
+            qualification_metric,
+            qualification_value,
+            qualification_minimum
+        FROM player_league_context_ratings
+        WHERE season = ?
+          AND as_of_date = ?
+          AND player_key = ?
+          AND player_group IN ({placeholders})
+        """,
+        rows_params,
+    ).df()
 
 
 def get_pitcher_options(conn: duckdb.DuckDBPyConnection) -> list[str]:
@@ -651,8 +750,11 @@ def get_pitcher_profile(conn: duckdb.DuckDBPyConnection, player_name: str) -> di
             ["game_date", "opponent", "pitch_name", "release_speed"]
         ].head(10)
 
+    league_context = get_pitcher_league_context_ratings(conn, player_name, summary[-1] if summary else None)
+
     return {
         "summary": summary,
+        "league_context": league_context,
         "pitch_usage": pitch_usage,
         "strikeouts_by_month": strikeouts_by_month,
         "strikeouts_by_opponent": strikeouts_by_opponent,

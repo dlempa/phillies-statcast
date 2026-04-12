@@ -51,9 +51,23 @@ else:
 
     profile = get_pitcher_profile(conn, selected_pitcher)
     summary = profile["summary"]
+    league_context = profile["league_context"]
 
     if not summary:
-        st.info("No profile data is available for this pitcher yet.")
+        with st.container(border=True):
+            render_profile_header(
+                selected_pitcher,
+                "Current-season MLB context for the selected Phillies pitcher.",
+                chip="Pitcher",
+            )
+            render_section_heading("League Context Ratings", "Current-season run prevention and strikeout rates compared with MLB role baselines.")
+            st.html(
+                render_highlight_table(
+                    league_context,
+                    emphasis_columns=["Stat", "Rating Tier"],
+                    secondary_columns=["League Percentile", "MLB Qualified?"],
+                ),
+            )
     else:
         (
             wins,
@@ -87,6 +101,16 @@ else:
                     {"label": "Strikeouts", "value": format_card(strikeouts)},
                     {"label": "ERA", "value": format_card(era)},
                 ]
+            )
+
+        with st.container(border=True):
+            render_section_heading("League Context Ratings", "Current-season run prevention and strikeout rates compared with MLB role baselines.")
+            st.html(
+                render_highlight_table(
+                    league_context,
+                    emphasis_columns=["Stat", "Rating Tier"],
+                    secondary_columns=["League Percentile", "MLB Qualified?"],
+                ),
             )
 
         overview_tab, velocity_tab, outcomes_tab, splits_tab = st.tabs(["Overview", "Velocity", "Outcomes", "Splits"])

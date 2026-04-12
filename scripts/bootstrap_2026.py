@@ -13,6 +13,7 @@ if str(SRC_PATH) not in sys.path:
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
 from phillies_stats.ingest import ingest_date_range, refresh_pitcher_season_summary
+from phillies_stats.league_context import refresh_league_context
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,12 +49,30 @@ def main() -> None:
     except Exception as exc:
         pitcher_summary_warning = str(exc)
 
+    league_context_rows = {"cutoff_rows": 0, "rating_rows": 0}
+    league_context_warning = None
+    try:
+        league_context_rows = refresh_league_context(
+            conn,
+            season=config.season,
+            team_code=config.team_code,
+            as_of_date=end_date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception as exc:
+        league_context_warning = str(exc)
+
     print(f"Backfill complete for {config.season}.")
     print(f"Rows seen: {result['rows_seen']}")
     print(f"Rows inserted: {result['rows_inserted']}")
     print(f"Pitcher summary rows refreshed: {pitcher_summary_rows}")
+    print(f"League cutoff rows refreshed: {league_context_rows['cutoff_rows']}")
+    print(f"Player league rating rows refreshed: {league_context_rows['rating_rows']}")
     if pitcher_summary_warning:
         print(f"Pitcher summary warning: {pitcher_summary_warning}")
+    if league_context_warning:
+        print(f"League context warning: {league_context_warning}")
     print(f"Database: {config.db_path}")
 
 
