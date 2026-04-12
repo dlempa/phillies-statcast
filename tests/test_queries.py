@@ -15,6 +15,8 @@ from phillies_stats.queries import (
     get_pitcher_strikeout_leaders,
     get_pitcher_walks_leaders,
     get_pitcher_wins_leaders,
+    get_player_options,
+    get_player_summary,
     get_player_hr_distance_stats,
     get_top_longest_home_runs,
 )
@@ -154,6 +156,110 @@ class QueryTests(unittest.TestCase):
         schwarber_rows = player_power[player_power["player_name"].str.lower().eq("kyle schwarber")]
         self.assertEqual(len(schwarber_rows), 1)
         self.assertEqual(schwarber_rows.iloc[0]["home_run_count"], 3)
+
+    def test_hitter_profile_summary_includes_zero_home_run_hitters(self):
+        stott_events = sample_events_frame(
+            sample_event(
+                event_id="stott-single-1",
+                game_pk=401,
+                game_date_value=date(2026, 4, 4),
+                batter_name="Bryson Stott",
+                batter_id=681082,
+                hit_distance_sc=312.0,
+                launch_speed=107.6,
+                launch_angle=10.0,
+                events="single",
+                is_home_run=False,
+            ),
+            sample_event(
+                event_id="stott-groundout-1",
+                game_pk=402,
+                game_date_value=date(2026, 4, 5),
+                batter_name="Bryson Stott",
+                batter_id=681082,
+                hit_distance_sc=184.0,
+                launch_speed=96.1,
+                launch_angle=-4.0,
+                events="field_out",
+                is_home_run=False,
+            ),
+        )
+
+        with TempDatabase() as conn:
+            upsert_statcast_data(conn, stott_events, season=2026)
+            profile = get_player_summary(conn, "Bryson Stott")
+
+        summary = profile["summary"]
+        self.assertEqual(summary[0], 0)
+        self.assertIsNone(summary[1])
+        self.assertIsNone(summary[2])
+        self.assertEqual(summary[3], 107.6)
+        self.assertTrue(profile["home_runs"].empty)
+
+    def test_hitter_options_include_league_context_only_players(self):
+        with TempDatabase() as conn:
+            conn.execute(
+                """
+                INSERT INTO player_league_context_ratings (
+                    season,
+                    as_of_date,
+                    player_name,
+                    player_key,
+                    team,
+                    player_group,
+                    baseline_group,
+                    stat_key,
+                    stat_label,
+                    direction,
+                    stat_value
+                )
+                VALUES (2026, DATE '2026-04-11', 'Justin Crawford', 'justincrawford', 'PHI',
+                        'hitter', 'hitter', 'hr', 'HR', 'higher', 0)
+                """
+            )
+            options = get_player_options(conn)
+
+        self.assertIn("Justin Crawford", options)
+
+    def test_hitter_options_and_summary_match_name_punctuation_variants_by_key(self):
+        realmuto_event = sample_event(
+            event_id="realmuto-1",
+            game_pk=411,
+            game_date_value=date(2026, 4, 6),
+            batter_name="J. T. Realmuto",
+            batter_id=592663,
+            hit_distance_sc=391.0,
+            launch_speed=106.5,
+            launch_angle=26.0,
+        )
+
+        with TempDatabase() as conn:
+            upsert_statcast_data(conn, sample_events_frame(realmuto_event), season=2026)
+            conn.execute(
+                """
+                INSERT INTO player_league_context_ratings (
+                    season,
+                    as_of_date,
+                    player_name,
+                    player_key,
+                    team,
+                    player_group,
+                    baseline_group,
+                    stat_key,
+                    stat_label,
+                    direction,
+                    stat_value
+                )
+                VALUES (2026, DATE '2026-04-11', 'J.T. Realmuto', 'jtrealmuto', 'PHI',
+                        'hitter', 'hitter', 'hr', 'HR', 'higher', 1)
+                """
+            )
+            options = get_player_options(conn)
+            profile = get_player_summary(conn, "J.T. Realmuto")
+
+        self.assertEqual([name for name in options if "Realmuto" in name], ["J. T. Realmuto"])
+        self.assertEqual(profile["summary"][0], 1)
+        self.assertEqual(profile["summary"][3], 106.5)
 
     def test_pitcher_strikeout_leaders_uses_pitching_events(self):
         pitching_events = sample_events_frame(
@@ -388,6 +494,60 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(summary[7], 0.9)
         self.assertEqual(summary[14], 2)
         self.assertEqual(summary[15], "Closer")
+
+    def test_pitcher_profile_uses_event_velocity_when_summary_velocity_missing(self):
+        nola_event = sample_event(
+            event_id="nola-velocity-1",
+            game_pk=901,
+            game_date_value=date(2026, 4, 8),
+            batter_name="Opponent Four",
+            batter_id=901,
+            pitcher_name="Aaron Nola",
+            pitcher_id=605400,
+            events="strikeout",
+            is_home_run=False,
+            is_strikeout=True,
+            phillies_role="pitching",
+            is_phillies_batter=False,
+            is_phillies_pitcher=True,
+            batting_team="MIA",
+            fielding_team="PHI",
+            home_team="PHI",
+            away_team="MIA",
+            inning_topbot="Top",
+            release_speed=94.5,
+        )
+        nola_event["pitch_name"] = None
+        nola_event["pitch_type"] = "FF"
+        pitcher_summary = sample_events_frame(
+            {
+                "season": 2026,
+                "pitcher_name": "Aaron Nola",
+                "team": "PHI",
+                "wins": 1,
+                "losses": 1,
+                "games": 1,
+                "games_started": 1,
+                "saves": 0,
+                "innings_pitched": 6.0,
+                "strikeouts": 7,
+                "walks": 2,
+                "home_runs_allowed": 1,
+                "era": 3.00,
+                "whip": 1.00,
+                "avg_fastball_velocity": None,
+                "war": 0.1,
+            }
+        )
+
+        with TempDatabase() as conn:
+            upsert_statcast_data(conn, sample_events_frame(nola_event), season=2026)
+            upsert_pitcher_season_summary(conn, pitcher_summary)
+            profile = get_pitcher_profile(conn, "Aaron Nola")
+
+        summary = profile["summary"]
+        self.assertEqual(summary[8], 94.5)
+        self.assertEqual(summary[9], 94.5)
 
     def test_pitcher_strikeout_leaders_handles_missing_season_summary(self):
         pitching_events = sample_events_frame(

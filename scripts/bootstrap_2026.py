@@ -12,7 +12,7 @@ if str(SRC_PATH) not in sys.path:
 
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
-from phillies_stats.ingest import ingest_date_range, refresh_pitcher_season_summary
+from phillies_stats.ingest import ingest_date_range, refresh_missing_player_names, refresh_pitcher_season_summary
 from phillies_stats.league_context import refresh_league_context
 
 
@@ -42,6 +42,7 @@ def main() -> None:
         team_code=config.team_code,
         window_days=args.window_days,
     )
+    player_name_rows = refresh_missing_player_names(conn)
     pitcher_summary_rows = 0
     pitcher_summary_warning = None
     try:
@@ -66,6 +67,7 @@ def main() -> None:
     print(f"Backfill complete for {config.season}.")
     print(f"Rows seen: {result['rows_seen']}")
     print(f"Rows inserted: {result['rows_inserted']}")
+    print(f"Missing player names refreshed: {player_name_rows}")
     print(f"Pitcher summary rows refreshed: {pitcher_summary_rows}")
     print(f"League cutoff rows refreshed: {league_context_rows['cutoff_rows']}")
     print(f"Player league rating rows refreshed: {league_context_rows['rating_rows']}")
