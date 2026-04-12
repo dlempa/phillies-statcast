@@ -234,30 +234,38 @@ def create_views(conn: duckdb.DuckDBPyConnection) -> None:
         FROM statcast_events e
         LEFT JOIN players p ON e.batter_id = p.player_id
         WHERE e.is_phillies_batter = TRUE
-          AND e.batter_name IS NOT NULL
-          AND TRIM(e.batter_name) <> ''
+          AND COALESCE(p.player_name, e.batter_name) IS NOT NULL
+          AND TRIM(COALESCE(p.player_name, e.batter_name)) <> ''
           AND e.launch_speed IS NOT NULL
         ORDER BY e.launch_speed DESC, e.game_date ASC, e.event_id ASC;
 
-        CREATE OR REPLACE VIEW player_home_run_summary AS
-        WITH player_hard_hit AS (
-            SELECT
-                batter_id,
-                MAX(launch_speed) AS hardest_hit_ball_mph
-            FROM statcast_events
-            WHERE is_phillies_batter = TRUE
-            GROUP BY batter_id
-        )
+        CREATE OR REPLACE VIEW hitter_event_summary AS
         SELECT
-            hr.batter_id,
-            hr.batter_name AS player_name,
-            COUNT(*) AS home_run_count,
-            ROUND(AVG(hr.hit_distance_sc), 1) AS avg_hr_distance_ft,
-            MAX(hr.hit_distance_sc) AS max_hr_distance_ft,
-            p.hardest_hit_ball_mph
-        FROM phillies_home_runs hr
-        LEFT JOIN player_hard_hit p ON hr.batter_id = p.batter_id
-        GROUP BY hr.batter_id, hr.batter_name, p.hardest_hit_ball_mph
+            e.batter_id,
+            COALESCE(p.player_name, e.batter_name) AS player_name,
+            COUNT(DISTINCT e.game_pk) AS games_seen,
+            SUM(CASE WHEN e.is_home_run = TRUE THEN 1 ELSE 0 END) AS home_run_count,
+            ROUND(AVG(CASE WHEN e.is_home_run = TRUE THEN e.hit_distance_sc END), 1) AS avg_hr_distance_ft,
+            MAX(CASE WHEN e.is_home_run = TRUE THEN e.hit_distance_sc END) AS max_hr_distance_ft,
+            MAX(e.launch_speed) AS hardest_hit_ball_mph
+        FROM statcast_events e
+        LEFT JOIN players p ON e.batter_id = p.player_id
+        WHERE e.is_phillies_batter = TRUE
+          AND COALESCE(p.player_name, e.batter_name) IS NOT NULL
+          AND TRIM(COALESCE(p.player_name, e.batter_name)) <> ''
+        GROUP BY e.batter_id, COALESCE(p.player_name, e.batter_name)
+        ORDER BY home_run_count DESC, max_hr_distance_ft DESC NULLS LAST, player_name ASC;
+
+        CREATE OR REPLACE VIEW player_home_run_summary AS
+        SELECT
+            batter_id,
+            player_name,
+            home_run_count,
+            avg_hr_distance_ft,
+            max_hr_distance_ft,
+            hardest_hit_ball_mph
+        FROM hitter_event_summary
+        WHERE home_run_count > 0
         ORDER BY home_run_count DESC, max_hr_distance_ft DESC NULLS LAST, player_name ASC;
 
         CREATE OR REPLACE VIEW monthly_home_run_totals AS
@@ -322,7 +330,16 @@ def create_views(conn: duckdb.DuckDBPyConnection) -> None:
             SUM(CASE WHEN e.description IN ('swinging_strike', 'swinging_strike_blocked') THEN 1 ELSE 0 END) AS whiffs,
             MAX(e.launch_speed) AS hardest_hit_allowed_mph,
             MAX(e.release_speed) AS max_velocity_mph,
-            ROUND(AVG(CASE WHEN e.pitch_name IN ('4-Seam Fastball', 'Sinker', 'Cutter') THEN e.release_speed END), 2)
+            ROUND(
+                AVG(
+                    CASE
+                        WHEN e.pitch_name IN ('4-Seam Fastball', 'Sinker', 'Cutter')
+                          OR e.pitch_type IN ('FF', 'SI', 'FC')
+                        THEN e.release_speed
+                    END
+                ),
+                2
+            )
                 AS avg_fastball_velocity_mph
         FROM statcast_events e
         LEFT JOIN players p ON e.pitcher_id = p.player_id

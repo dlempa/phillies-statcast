@@ -63,6 +63,14 @@ def _lookup_player_names(player_ids: pd.Series) -> dict[int, str]:
     if not ids:
         return {}
 
+    name_map = _lookup_player_names_from_pybaseball(ids)
+    missing_ids = [player_id for player_id in ids if player_id not in name_map]
+    if missing_ids:
+        name_map.update(_lookup_player_names_from_stats_api(missing_ids))
+    return name_map
+
+
+def _lookup_player_names_from_pybaseball(ids: list[int]) -> dict[int, str]:
     try:
         from pybaseball import playerid_reverse_lookup
     except ImportError:
@@ -91,6 +99,41 @@ def _lookup_player_names(player_ids: pd.Series) -> dict[int, str]:
                 name_map[int(player_id)] = name
         except (TypeError, ValueError):
             continue
+    return name_map
+
+
+def _lookup_player_names_from_stats_api(ids: list[int]) -> dict[int, str]:
+    name_map: dict[int, str] = {}
+    if not ids:
+        return name_map
+
+    chunk_size = 100
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start : start + chunk_size]
+        try:
+            response = requests.get(
+                "https://statsapi.mlb.com/api/v1/people",
+                params={"personIds": ",".join(str(player_id) for player_id in chunk)},
+                timeout=30,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception:
+            continue
+
+        people = payload.get("people", [])
+        if not isinstance(people, list):
+            continue
+        for person in people:
+            if not isinstance(person, dict):
+                continue
+            player_id = person.get("id")
+            name = format_player_name(person.get("fullName"))
+            try:
+                if pd.notna(player_id) and name:
+                    name_map[int(player_id)] = str(name)
+            except (TypeError, ValueError):
+                continue
     return name_map
 
 
@@ -478,7 +521,7 @@ def upsert_statcast_data(
 
     conn.execute(
         """
-        INSERT INTO statcast_events (
+        INSERT OR REPLACE INTO statcast_events (
             event_id,
             season,
             game_pk,
@@ -576,9 +619,6 @@ def upsert_statcast_data(
             is_strikeout,
             is_in_play
         FROM events_stage s
-        WHERE NOT EXISTS (
-            SELECT 1 FROM statcast_events e WHERE e.event_id = s.event_id
-        )
         """
     )
 
@@ -588,6 +628,100 @@ def upsert_statcast_data(
 
     after_count = conn.execute("SELECT COUNT(*) FROM statcast_events").fetchone()[0]
     return after_count - before_count
+
+
+def refresh_missing_player_names(conn: duckdb.DuckDBPyConnection) -> int:
+    missing = conn.execute(
+        """
+        SELECT DISTINCT batter_id AS player_id
+        FROM statcast_events
+        WHERE batter_id IS NOT NULL
+          AND (batter_name IS NULL OR TRIM(batter_name) = '')
+        UNION
+        SELECT DISTINCT pitcher_id AS player_id
+        FROM statcast_events
+        WHERE pitcher_id IS NOT NULL
+          AND (pitcher_name IS NULL OR TRIM(pitcher_name) = '')
+        """
+    ).df()
+    if missing.empty:
+        return 0
+
+    name_map = _lookup_player_names(missing["player_id"])
+    if not name_map:
+        return 0
+
+    stage = pd.DataFrame(
+        [{"player_id": player_id, "player_name": player_name} for player_id, player_name in name_map.items()]
+    )
+    conn.register("player_name_stage", stage)
+    try:
+        conn.execute(
+            """
+            UPDATE statcast_events AS e
+            SET batter_name = s.player_name
+            FROM player_name_stage AS s
+            WHERE e.batter_id = s.player_id
+              AND (e.batter_name IS NULL OR TRIM(e.batter_name) = '')
+            """
+        )
+        conn.execute(
+            """
+            UPDATE statcast_events AS e
+            SET pitcher_name = s.player_name
+            FROM player_name_stage AS s
+            WHERE e.pitcher_id = s.player_id
+              AND (e.pitcher_name IS NULL OR TRIM(e.pitcher_name) = '')
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO players (
+                player_id,
+                player_name,
+                player_type,
+                bats,
+                throws,
+                last_seen_date
+            )
+            WITH staged_events AS (
+                SELECT
+                    e.batter_id AS player_id,
+                    s.player_name,
+                    'batter' AS player_type,
+                    e.stand AS bats,
+                    NULL AS throws,
+                    e.game_date
+                FROM statcast_events e
+                JOIN player_name_stage s ON e.batter_id = s.player_id
+                WHERE e.batter_id IS NOT NULL
+                UNION ALL
+                SELECT
+                    e.pitcher_id AS player_id,
+                    s.player_name,
+                    'pitcher' AS player_type,
+                    NULL AS bats,
+                    e.p_throws AS throws,
+                    e.game_date
+                FROM statcast_events e
+                JOIN player_name_stage s ON e.pitcher_id = s.player_id
+                WHERE e.pitcher_id IS NOT NULL
+            )
+            SELECT
+                player_id,
+                ANY_VALUE(player_name) AS player_name,
+                CASE WHEN COUNT(DISTINCT player_type) > 1 THEN 'both' ELSE ANY_VALUE(player_type) END AS player_type,
+                MAX(bats) AS bats,
+                MAX(throws) AS throws,
+                MAX(game_date) AS last_seen_date
+            FROM staged_events
+            GROUP BY player_id
+            """
+        )
+    finally:
+        conn.unregister("player_name_stage")
+
+    return len(name_map)
 
 
 def upsert_pitcher_season_summary(

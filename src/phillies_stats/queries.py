@@ -220,47 +220,77 @@ def get_hardest_hit_balls(conn: duckdb.DuckDBPyConnection, limit: int = 10) -> p
 
 
 def get_player_options(conn: duckdb.DuckDBPyConnection) -> list[str]:
+    config = get_config()
     rows = conn.execute(
         """
-        SELECT DISTINCT batter_name AS player_name
-        FROM statcast_events
-        WHERE is_phillies_batter = TRUE
-          AND batter_name IS NOT NULL
+        SELECT player_name, 1 AS source_priority
+        FROM hitter_event_summary
+        WHERE player_name IS NOT NULL
+          AND TRIM(player_name) <> ''
+        UNION
+        SELECT player_name, 2 AS source_priority
+        FROM player_league_context_ratings
+        WHERE season = ?
+          AND team = ?
+          AND player_group = 'hitter'
+          AND player_name IS NOT NULL
+          AND TRIM(player_name) <> ''
         ORDER BY player_name ASC
-        """
+        """,
+        [config.season, config.team_code],
     ).fetchall()
-    return sorted({format_player_name(row[0]) for row in rows if row[0]})
+    options_by_key: dict[str, tuple[int, str]] = {}
+    for name, source_priority in rows:
+        formatted = format_player_name(name)
+        player_key = normalize_player_key(formatted)
+        if not isinstance(formatted, str) or not player_key:
+            continue
+        existing = options_by_key.get(player_key)
+        if existing is None or source_priority < existing[0]:
+            options_by_key[player_key] = (int(source_priority), formatted)
+    return sorted(name for _, name in options_by_key.values())
 
 
 def get_player_summary(conn: duckdb.DuckDBPyConnection, player_name: str) -> dict[str, object]:
-    hr_summary = conn.execute(
+    hitter_summaries = conn.execute(
         """
         SELECT
+            player_name,
             home_run_count,
             max_hr_distance_ft,
             avg_hr_distance_ft,
             hardest_hit_ball_mph
-        FROM player_home_run_summary
-        WHERE LOWER(player_name) = LOWER(?)
-        """,
-        [player_name],
-    ).fetchone()
+        FROM hitter_event_summary
+        """
+    ).df()
+    hr_summary = None
+    if not hitter_summaries.empty:
+        summary_row = _filter_player_frame(hitter_summaries, player_name)
+        if not summary_row.empty:
+            row = summary_row.iloc[0]
+            hr_summary = (
+                _none_if_missing(row.get("home_run_count")),
+                _none_if_missing(row.get("max_hr_distance_ft")),
+                _none_if_missing(row.get("avg_hr_distance_ft")),
+                _none_if_missing(row.get("hardest_hit_ball_mph")),
+            )
     monthly = conn.execute(
         """
-        SELECT month_start, home_run_count
+        SELECT player_name, month_start, home_run_count
         FROM monthly_home_run_totals
-        WHERE LOWER(player_name) = LOWER(?)
         ORDER BY month_start ASC
-        """,
-        [player_name],
+        """
     ).df()
+    monthly = _filter_player_frame(monthly, player_name)
     if not monthly.empty:
         monthly["month_name"] = monthly["month_start"].map(lambda value: calendar.month_name[value.month])
+        monthly = monthly[["month_start", "home_run_count", "month_name"]]
 
     home_runs = conn.execute(
         """
         SELECT
-            ROW_NUMBER() OVER (ORDER BY game_date ASC, event_id ASC) AS home_run_number,
+            batter_name AS player_name,
+            event_id,
             game_date,
             opponent,
             venue_name,
@@ -268,11 +298,24 @@ def get_player_summary(conn: duckdb.DuckDBPyConnection, player_name: str) -> dic
             launch_speed AS exit_velocity_mph,
             launch_angle
         FROM phillies_home_runs
-        WHERE LOWER(batter_name) = LOWER(?)
         ORDER BY game_date ASC, event_id ASC
-        """,
-        [player_name],
+        """
     ).df()
+    home_runs = _filter_player_frame(home_runs, player_name)
+    if not home_runs.empty:
+        home_runs = home_runs.sort_values(["game_date", "event_id"]).reset_index(drop=True)
+        home_runs.insert(0, "home_run_number", range(1, len(home_runs) + 1))
+        home_runs = home_runs[
+            [
+                "home_run_number",
+                "game_date",
+                "opponent",
+                "venue_name",
+                "distance_ft",
+                "exit_velocity_mph",
+                "launch_angle",
+            ]
+        ]
 
     league_context = get_hitter_league_context_ratings(conn, player_name)
 
@@ -442,11 +485,15 @@ def _build_pitcher_overview(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
             overview[column] = pd.NA
 
     overview["player_name"] = overview["player_name_season"].fillna(overview["player_name_event"])
-    overview["strikeouts"] = overview["strikeouts_season"].fillna(overview["strikeouts_event"])
-    overview["walks_issued"] = overview["walks"].fillna(overview["walks_issued"])
-    overview["home_runs_allowed"] = overview["home_runs_allowed_season"].fillna(overview["home_runs_allowed_event"])
-    overview["avg_fastball_velocity_mph"] = overview["avg_fastball_velocity"].fillna(
-        overview["avg_fastball_velocity_mph"]
+    overview["strikeouts"] = _coalesce_series(overview["strikeouts_season"], overview["strikeouts_event"])
+    overview["walks_issued"] = _coalesce_series(overview["walks"], overview["walks_issued"])
+    overview["home_runs_allowed"] = _coalesce_series(
+        overview["home_runs_allowed_season"],
+        overview["home_runs_allowed_event"],
+    )
+    overview["avg_fastball_velocity_mph"] = _coalesce_series(
+        overview["avg_fastball_velocity"],
+        overview["avg_fastball_velocity_mph"],
     )
     overview["position"] = overview.apply(_derive_pitcher_position, axis=1)
     return overview
@@ -457,7 +504,25 @@ def _derive_pitcher_position(row: pd.Series) -> str:
     return {"starter": "Starter", "reliever": "Reliever", "closer": "Closer"}.get(player_group, "Reliever")
 
 
-def _filter_pitcher_frame(frame: pd.DataFrame, player_name: str, column: str = "player_name") -> pd.DataFrame:
+def _none_if_missing(value: object) -> object:
+    if value is None or pd.isna(value):
+        return None
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except (AttributeError, ValueError):
+            return value
+    return value
+
+
+def _coalesce_series(primary: pd.Series, fallback: pd.Series) -> pd.Series:
+    result = primary.copy()
+    missing = result.isna()
+    result.loc[missing] = fallback.loc[missing]
+    return result
+
+
+def _filter_player_frame(frame: pd.DataFrame, player_name: str, column: str = "player_name") -> pd.DataFrame:
     if frame.empty:
         return frame
     target_key = normalize_player_key(player_name)
@@ -465,6 +530,10 @@ def _filter_pitcher_frame(frame: pd.DataFrame, player_name: str, column: str = "
     working["_player_key"] = working[column].map(normalize_player_key)
     filtered = working.loc[working["_player_key"].eq(target_key)].drop(columns=["_player_key"])
     return filtered
+
+
+def _filter_pitcher_frame(frame: pd.DataFrame, player_name: str, column: str = "player_name") -> pd.DataFrame:
+    return _filter_player_frame(frame, player_name, column)
 
 
 def get_hitter_league_context_ratings(
