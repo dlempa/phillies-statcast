@@ -166,6 +166,53 @@ def initialize_database(conn: duckdb.DuckDBPyConnection) -> None:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (season, as_of_date, player_key, player_group, stat_key)
         );
+
+        CREATE TABLE IF NOT EXISTS team_season_stats (
+            season INTEGER NOT NULL,
+            as_of_date DATE NOT NULL,
+            team_id INTEGER NOT NULL,
+            team_abbr TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            league TEXT,
+            division TEXT,
+            stat_group TEXT NOT NULL,
+            games INTEGER,
+            runs INTEGER,
+            runs_allowed INTEGER,
+            home_runs INTEGER,
+            batting_average DOUBLE,
+            on_base_percentage DOUBLE,
+            slugging_percentage DOUBLE,
+            ops DOUBLE,
+            era DOUBLE,
+            whip DOUBLE,
+            strikeouts INTEGER,
+            walks INTEGER,
+            home_runs_allowed INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (season, as_of_date, team_abbr, stat_group)
+        );
+
+        CREATE TABLE IF NOT EXISTS division_standings (
+            season INTEGER NOT NULL,
+            as_of_date DATE NOT NULL,
+            team_id INTEGER NOT NULL,
+            team_abbr TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            league TEXT,
+            division TEXT,
+            division_rank INTEGER,
+            wins INTEGER,
+            losses INTEGER,
+            winning_percentage DOUBLE,
+            games_back TEXT,
+            runs_scored INTEGER,
+            runs_allowed INTEGER,
+            run_differential INTEGER,
+            streak TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (season, as_of_date, team_abbr)
+        );
         """
     )
     create_views(conn)

@@ -5,6 +5,7 @@ from base64 import b64encode
 from datetime import date, datetime
 from html import escape
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import altair as alt
 import pandas as pd
@@ -17,6 +18,8 @@ PHILLIES_RED_DARK = "#C1121F"
 PHILLIES_TEXT = "#1F2933"
 PHILLIES_MUTED = "#6B7280"
 PHILLIES_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "primary_logo.png"
+EASTERN_TZ = ZoneInfo("America/New_York")
+UTC_TZ = ZoneInfo("UTC")
 
 APP_CSS = """
 <style>
@@ -368,24 +371,33 @@ div.stButton > button:hover {
 }
 
 .stTabs [data-baseweb="tab-list"] {
-    gap: 0.3rem;
-    background: var(--ph-panel-soft);
-    border: 1px solid var(--ph-border);
+    gap: 0.25rem;
+    background: var(--ph-accent-dark);
+    border: 1px solid var(--ph-accent-dark);
     border-radius: 8px;
-    padding: 0.25rem;
-    margin-bottom: 0.9rem;
+    padding: 0.3rem;
+    margin: 0.25rem 0 1rem;
+    box-shadow: 0 4px 12px rgba(193, 18, 31, 0.16);
 }
 
 .stTabs [data-baseweb="tab"] {
-    border-radius: 8px;
-    color: var(--ph-muted);
-    min-height: 2.45rem;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.82);
+    min-height: 2.65rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    font-weight: 700;
 }
 
 .stTabs [aria-selected="true"] {
     background: #ffffff !important;
     color: var(--ph-accent-dark) !important;
-    box-shadow: 0 1px 2px rgba(31, 41, 51, 0.05);
+    box-shadow: 0 2px 6px rgba(31, 41, 51, 0.14);
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
 }
 
 .stAlert {
@@ -616,7 +628,10 @@ def format_timestamp(value: object) -> str | None:
     if isinstance(value, pd.Timestamp):
         value = value.to_pydatetime()
     if isinstance(value, datetime):
-        return value.strftime("%b %d, %Y %I:%M %p")
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC_TZ)
+        eastern_value = value.astimezone(EASTERN_TZ)
+        return eastern_value.strftime("%b %d, %Y %I:%M %p ET")
     if isinstance(value, date):
         return value.strftime("%b %d, %Y")
     return str(value)

@@ -66,7 +66,6 @@ else:
                 {
                     "label": "Pitchers 98+",
                     "value": format_metric_value((velocity_summary["max_velocity_mph"] >= 98).sum()),
-                    "helper": "Pitchers who have hit at least 98 mph",
                 },
             ]
         )
@@ -77,7 +76,6 @@ if not fastest_pitches.empty:
     with st.container(border=True):
         render_section_heading(
             "Top 10 Fastest Pitches",
-            "Pitcher, date, opponent, pitch type, and raw velocity are visually foregrounded here.",
         )
         st.html(
             render_highlight_table(
@@ -125,7 +123,7 @@ with summary_left:
 
 with summary_right:
     with st.container(border=True):
-        render_section_heading("Velocity Summary", "Maximum velocity and average fastball velocity by pitcher.")
+        render_section_heading("Velocity Summary")
         if velocity_summary.empty:
             st.info("Pitcher velocity summaries are not available yet.")
         else:
