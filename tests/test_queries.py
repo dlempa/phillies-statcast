@@ -549,6 +549,58 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(summary[8], 94.5)
         self.assertEqual(summary[9], 94.5)
 
+    def test_pitcher_profile_fastest_pitches_filters_before_limiting(self):
+        high_velocity_rows = [
+            sample_event(
+                event_id=f"high-velo-{index}",
+                game_pk=9000 + index,
+                game_date_value=date(2026, 4, 1),
+                batter_name="Opposing Hitter",
+                batter_id=8000 + index,
+                pitcher_name="High Velo Pitcher",
+                pitcher_id=7001,
+                events="called_strike",
+                is_home_run=False,
+                is_in_play=False,
+                release_speed=100.0 + (index / 1000),
+                phillies_role="pitching",
+                is_phillies_batter=False,
+                is_phillies_pitcher=True,
+                batting_team="ATL",
+                fielding_team="PHI",
+            )
+            for index in range(205)
+        ]
+        target_rows = [
+            sample_event(
+                event_id=f"target-velo-{index}",
+                game_pk=9500 + index,
+                game_date_value=date(2026, 4, 2),
+                batter_name="Opposing Hitter",
+                batter_id=8500 + index,
+                pitcher_name="Low Velo Pitcher",
+                pitcher_id=7002,
+                events="called_strike",
+                is_home_run=False,
+                is_in_play=False,
+                release_speed=91.0 + index,
+                phillies_role="pitching",
+                is_phillies_batter=False,
+                is_phillies_pitcher=True,
+                batting_team="ATL",
+                fielding_team="PHI",
+            )
+            for index in range(2)
+        ]
+
+        with TempDatabase() as conn:
+            upsert_statcast_data(conn, sample_events_frame(*(high_velocity_rows + target_rows)), season=2026)
+            profile = get_pitcher_profile(conn, "Low Velo Pitcher")
+
+        fastest = profile["fastest_pitches"]
+        self.assertEqual(len(fastest), 2)
+        self.assertEqual(fastest.iloc[0]["release_speed"], 92.0)
+
     def test_pitcher_strikeout_leaders_handles_missing_season_summary(self):
         pitching_events = sample_events_frame(
             sample_event(

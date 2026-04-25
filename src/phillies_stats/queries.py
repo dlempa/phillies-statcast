@@ -18,6 +18,20 @@ from phillies_stats.league_context import (
     pitcher_position_to_group,
 )
 
+TEAM_RANK_STAT_DEFINITIONS = {
+    "batting_average": ("hitting", "BA", "batting_average", "higher", "rate3"),
+    "on_base_percentage": ("hitting", "OBP", "on_base_percentage", "higher", "rate3"),
+    "ops": ("hitting", "OPS", "ops", "higher", "rate3"),
+    "home_runs": ("hitting", "HR", "home_runs", "higher", "int"),
+    "runs": ("hitting", "Runs", "runs", "higher", "int"),
+    "era": ("pitching", "ERA", "era", "lower", "decimal2"),
+    "whip": ("pitching", "WHIP", "whip", "lower", "decimal2"),
+    "strikeouts": ("pitching", "Pitching K", "strikeouts", "higher", "int"),
+    "walks": ("pitching", "Walks Allowed", "walks", "lower", "int"),
+    "home_runs_allowed": ("pitching", "HR Allowed", "home_runs_allowed", "lower", "int"),
+}
+NL_EAST_TEAM_CODES = ("ATL", "MIA", "NYM", "PHI", "WSH")
+
 
 def get_last_updated(conn: duckdb.DuckDBPyConnection):
     run_row = conn.execute(
@@ -353,6 +367,171 @@ def get_month_options(conn: duckdb.DuckDBPyConnection) -> list[int]:
 def get_latest_game_date(conn: duckdb.DuckDBPyConnection) -> date | None:
     row = conn.execute("SELECT MAX(game_date) FROM statcast_events").fetchone()
     return row[0] if row else None
+
+
+def get_team_context_last_updated(conn: duckdb.DuckDBPyConnection) -> date | None:
+    row = conn.execute(
+        """
+        SELECT MAX(as_of_date)
+        FROM (
+            SELECT as_of_date FROM team_season_stats
+            UNION ALL
+            SELECT as_of_date FROM division_standings
+        )
+        """
+    ).fetchone()
+    return row[0] if row else None
+
+
+def get_team_local_summary(conn: duckdb.DuckDBPyConnection) -> dict[str, object]:
+    frame = conn.execute(
+        """
+        SELECT
+            game_date,
+            result_text,
+            CASE WHEN phillies_home THEN home_score ELSE away_score END AS runs_for,
+            CASE WHEN phillies_home THEN away_score ELSE home_score END AS runs_against
+        FROM games
+        WHERE result_text IS NOT NULL
+        ORDER BY game_date ASC, game_pk ASC
+        """
+    ).df()
+    if frame.empty:
+        return {
+            "record": "0-0",
+            "wins": 0,
+            "losses": 0,
+            "streak": "No games",
+            "runs_for": 0,
+            "runs_against": 0,
+            "run_differential": 0,
+            "latest_game_date": None,
+        }
+
+    result_prefix = frame["result_text"].astype(str).str[0]
+    wins = int(result_prefix.eq("W").sum())
+    losses = int(result_prefix.eq("L").sum())
+    runs_for = int(pd.to_numeric(frame["runs_for"], errors="coerce").fillna(0).sum())
+    runs_against = int(pd.to_numeric(frame["runs_against"], errors="coerce").fillna(0).sum())
+    latest_game_date = frame["game_date"].max()
+    streak = _current_result_streak(frame)
+    return {
+        "record": f"{wins}-{losses}",
+        "wins": wins,
+        "losses": losses,
+        "streak": streak,
+        "runs_for": runs_for,
+        "runs_against": runs_against,
+        "run_differential": runs_for - runs_against,
+        "latest_game_date": latest_game_date,
+    }
+
+
+def get_nl_east_standings(conn: duckdb.DuckDBPyConnection, *, season: int | None = None) -> pd.DataFrame:
+    config = get_config(season)
+    latest = _latest_as_of_date(conn, "division_standings", config.season)
+    if latest is None:
+        return pd.DataFrame()
+    return conn.execute(
+        """
+        SELECT
+            division_rank,
+            team_abbr,
+            team_name,
+            wins,
+            losses,
+            winning_percentage,
+            games_back,
+            runs_scored,
+            runs_allowed,
+            run_differential,
+            streak
+        FROM division_standings
+        WHERE season = ?
+          AND as_of_date = ?
+          AND team_abbr IN ('ATL', 'MIA', 'NYM', 'PHI', 'WSH')
+        ORDER BY division_rank ASC, winning_percentage DESC, wins DESC
+        """,
+        [config.season, latest],
+    ).df()
+
+
+def get_phillies_team_rankings(conn: duckdb.DuckDBPyConnection, *, season: int | None = None) -> pd.DataFrame:
+    config = get_config(season)
+    latest = _latest_as_of_date(conn, "team_season_stats", config.season)
+    if latest is None:
+        return pd.DataFrame()
+    stats = conn.execute(
+        """
+        SELECT *
+        FROM team_season_stats
+        WHERE season = ?
+          AND as_of_date = ?
+        """,
+        [config.season, latest],
+    ).df()
+    if stats.empty:
+        return stats
+
+    rows: list[dict[str, object]] = []
+    for _, (stat_group, label, column, direction, display_format) in TEAM_RANK_STAT_DEFINITIONS.items():
+        group_frame = stats.loc[stats["stat_group"].eq(stat_group)].copy()
+        if group_frame.empty or column not in group_frame.columns:
+            continue
+        phillies_row = group_frame.loc[group_frame["team_abbr"].eq(config.team_code)]
+        if phillies_row.empty:
+            continue
+        value = phillies_row.iloc[0].get(column)
+        rows.append(
+            {
+                "Stat": label,
+                "Value": _format_team_stat_value(value, display_format),
+                "NL Rank": _rank_team(group_frame.loc[group_frame["league"].eq("National League")], column, config.team_code, direction),
+                "MLB Rank": _rank_team(group_frame, column, config.team_code, direction),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def get_team_recent_results(conn: duckdb.DuckDBPyConnection, *, limit: int = 10) -> pd.DataFrame:
+    return conn.execute(
+        """
+        SELECT
+            game_date,
+            opponent,
+            result_text,
+            CASE WHEN phillies_home THEN home_score ELSE away_score END AS runs_for,
+            CASE WHEN phillies_home THEN away_score ELSE home_score END AS runs_against
+        FROM games
+        WHERE result_text IS NOT NULL
+        ORDER BY game_date DESC, game_pk DESC
+        LIMIT ?
+        """,
+        [limit],
+    ).df()
+
+
+def get_team_run_differential_trend(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    frame = conn.execute(
+        """
+        SELECT
+            game_date,
+            opponent,
+            result_text,
+            CASE WHEN phillies_home THEN home_score ELSE away_score END AS runs_for,
+            CASE WHEN phillies_home THEN away_score ELSE home_score END AS runs_against
+        FROM games
+        WHERE result_text IS NOT NULL
+        ORDER BY game_date ASC, game_pk ASC
+        """
+    ).df()
+    if frame.empty:
+        return frame
+    frame["game_run_differential"] = pd.to_numeric(frame["runs_for"], errors="coerce").fillna(0) - pd.to_numeric(
+        frame["runs_against"], errors="coerce"
+    ).fillna(0)
+    frame["cumulative_run_differential"] = frame["game_run_differential"].cumsum()
+    return frame
 
 
 def _ensure_pitcher_summary_loaded(conn: duckdb.DuckDBPyConnection) -> None:
@@ -810,7 +989,7 @@ def get_pitcher_profile(conn: duckdb.DuckDBPyConnection, player_name: str) -> di
         """
         SELECT player_name, game_date, opponent, pitch_name, release_speed
         FROM fastest_pitches
-        LIMIT 200
+        ORDER BY release_speed DESC, game_date ASC, player_name ASC
         """,
     ).df()
     if not fastest_pitches.empty:
@@ -829,3 +1008,47 @@ def get_pitcher_profile(conn: duckdb.DuckDBPyConnection, player_name: str) -> di
         "strikeouts_by_opponent": strikeouts_by_opponent,
         "fastest_pitches": fastest_pitches,
     }
+
+
+def _latest_as_of_date(conn: duckdb.DuckDBPyConnection, table_name: str, season: int) -> date | None:
+    row = conn.execute(f"SELECT MAX(as_of_date) FROM {table_name} WHERE season = ?", [season]).fetchone()
+    return row[0] if row else None
+
+
+def _current_result_streak(frame: pd.DataFrame) -> str:
+    if frame.empty:
+        return "No games"
+    results = frame.sort_values("game_date", ascending=False)["result_text"].astype(str).str[0].tolist()
+    first = results[0]
+    if first not in {"W", "L"}:
+        return "No streak"
+    count = 0
+    for result in results:
+        if result != first:
+            break
+        count += 1
+    return f"{first}{count}"
+
+
+def _rank_team(frame: pd.DataFrame, column: str, team_code: str, direction: str) -> str | None:
+    working = frame.loc[frame[column].notna(), ["team_abbr", column]].copy()
+    if working.empty or not working["team_abbr"].eq(team_code).any():
+        return None
+    ascending = direction == "lower"
+    working = working.sort_values([column, "team_abbr"], ascending=[ascending, True]).reset_index(drop=True)
+    working["rank"] = range(1, len(working) + 1)
+    rank = working.loc[working["team_abbr"].eq(team_code), "rank"].iloc[0]
+    return f"{int(rank)} of {len(working)}"
+
+
+def _format_team_stat_value(value: object, display_format: str) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    numeric = float(value)
+    if display_format == "rate3":
+        return f"{numeric:.3f}"
+    if display_format == "decimal2":
+        return f"{numeric:.2f}"
+    if display_format == "int":
+        return str(int(round(numeric)))
+    return str(value)

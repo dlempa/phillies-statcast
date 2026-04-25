@@ -47,7 +47,7 @@ else:
     with st.container(border=True):
         render_section_heading("Select a Pitcher", "Choose a Phillies pitcher to update the profile below.")
         render_filter_caption("Pitcher selector")
-        selected_pitcher = st.selectbox("Pitcher", options=pitchers, label_visibility="collapsed")
+        selected_pitcher = st.selectbox("Pitcher", options=pitchers, label_visibility="collapsed", key="pitcher_profile_selector")
 
     profile = get_pitcher_profile(conn, selected_pitcher)
     summary = profile["summary"]

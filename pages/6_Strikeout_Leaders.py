@@ -42,7 +42,7 @@ if pitchers:
     with st.container(border=True):
         render_section_heading("Select a Pitcher", "Choose a pitcher to update the supporting split views below.")
         render_filter_caption("Pitcher selector")
-        selected_pitcher = st.selectbox("Pitcher", options=pitchers, label_visibility="collapsed")
+        selected_pitcher = st.selectbox("Pitcher", options=pitchers, label_visibility="collapsed", key="strikeout_leaders_pitcher_selector")
 
 if leaders.empty:
     st.info("No Phillies pitcher strikeout data is available yet.")
@@ -66,18 +66,16 @@ else:
             {
                 "label": "Pitchers tracked",
                 "value": format_metric_value(leaders["player_name"].nunique()),
-                "helper": "Phillies pitchers with strikeout data",
             },
             {
                 "label": "Total strikeouts",
                 "value": format_metric_value(leaders["strikeouts"].sum()),
-                "helper": "Across the current leaderboard table",
             },
         ]
     )
 
     with st.container(border=True):
-        render_section_heading("Strikeout Leaderboard", "Strikeout totals are visually emphasized while the supporting context stays secondary.")
+        render_section_heading("Strikeout Leaderboard")
         st.html(
             render_highlight_table(
                 leaders.rename(

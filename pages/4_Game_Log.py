@@ -39,14 +39,17 @@ else:
         opponent_filter = filter_col_1.selectbox(
             "Opponent",
             options=["All opponents"] + sorted(game_log["opponent"].dropna().unique().tolist()),
+            key="game_log_opponent_filter",
         )
         result_filter = filter_col_2.selectbox(
             "Result",
             options=["All results"] + sorted(game_log["result_text"].dropna().unique().tolist()),
+            key="game_log_result_filter",
         )
         venue_filter = filter_col_3.selectbox(
             "Ballpark",
             options=["All ballparks"] + sorted(game_log["venue_name"].dropna().unique().tolist()),
+            key="game_log_venue_filter",
         )
 
     filtered = game_log.copy()
@@ -65,23 +68,19 @@ else:
                 {
                     "label": "Games shown",
                     "value": format_metric_value(len(filtered)),
-                    "helper": "Newest games stay at the top",
                     "tone": "accent",
                 },
                 {
                     "label": "Total HRs",
                     "value": format_metric_value(filtered["hr_count"].fillna(0).sum()),
-                    "helper": "Home runs across the filtered games",
                 },
                 {
                     "label": "Longest HR",
                     "value": f"{format_metric_value(filtered['longest_hr_ft'].max())} ft",
-                    "helper": "Longest home run in this filtered set",
                 },
                 {
                     "label": "Hardest-hit ball",
                     "value": f"{format_metric_value(filtered['hardest_hit_ball_mph'].max())} mph",
-                    "helper": "Peak exit velocity across the filtered games",
                 },
             ]
         )

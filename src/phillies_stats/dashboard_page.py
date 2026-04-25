@@ -95,7 +95,6 @@ def render_hitter_dashboard() -> None:
         with st.container(border=True):
             render_section_heading(
                 "Featured Leaderboard",
-                "The live top 10 longest Phillies home runs. Nightly data updates can move this board automatically.",
             )
             if top_10.empty:
                 st.info("No home run data is available yet.")
@@ -125,7 +124,7 @@ def render_hitter_dashboard() -> None:
 
     with secondary_left:
         with st.container(border=True):
-            render_section_heading("Hardest-hit Home Runs", "A quick look at the loudest Phillies barrels.")
+            render_section_heading("Hardest-hit Home Runs")
             if hardest_home_runs.empty:
                 st.info("Hard-hit home run data is not available yet.")
             else:
@@ -147,7 +146,7 @@ def render_hitter_dashboard() -> None:
 
     with secondary_right:
         with st.container(border=True):
-            render_section_heading("Power By Hitter", "Average and max home run distance leaders across the roster.")
+            render_section_heading("Power By Hitter")
             if player_distance.empty:
                 st.info("Player power summaries will appear after home run data is loaded.")
             else:

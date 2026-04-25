@@ -46,7 +46,7 @@ else:
     with st.container(border=True):
         render_section_heading("Select a Hitter", "Pick a Phillies hitter to switch the profile view.")
         render_filter_caption("Profile selector")
-        selected_player = st.selectbox("Hitter", options=players, label_visibility="collapsed")
+        selected_player = st.selectbox("Hitter", options=players, label_visibility="collapsed", key="hitter_profile_selector")
 
     player_summary = get_player_summary(conn, selected_player)
     summary = player_summary["summary"]

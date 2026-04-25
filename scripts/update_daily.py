@@ -15,6 +15,7 @@ from phillies_stats.database import get_connection, initialize_database
 from phillies_stats.ingest import ingest_date_range, refresh_missing_player_names, refresh_pitcher_season_summary
 from phillies_stats.league_context import refresh_league_context
 from phillies_stats.queries import get_latest_game_date
+from phillies_stats.team_context import refresh_team_context
 
 
 def parse_args() -> argparse.Namespace:
@@ -70,6 +71,13 @@ def main() -> None:
     except Exception as exc:
         league_context_warning = str(exc)
 
+    team_context_rows = {"team_stat_rows": 0, "standing_rows": 0}
+    team_context_warning = None
+    try:
+        team_context_rows = refresh_team_context(conn, season=config.season, as_of_date=end_date)
+    except Exception as exc:
+        team_context_warning = str(exc)
+
     print(f"Daily update complete for {config.season}.")
     print(f"Window: {start_date} to {end_date}")
     print(f"Rows seen: {result['rows_seen']}")
@@ -78,10 +86,14 @@ def main() -> None:
     print(f"Pitcher summary rows refreshed: {pitcher_summary_rows}")
     print(f"League cutoff rows refreshed: {league_context_rows['cutoff_rows']}")
     print(f"Player league rating rows refreshed: {league_context_rows['rating_rows']}")
+    print(f"Team stat rows refreshed: {team_context_rows['team_stat_rows']}")
+    print(f"Division standing rows refreshed: {team_context_rows['standing_rows']}")
     if pitcher_summary_warning:
         print(f"Pitcher summary warning: {pitcher_summary_warning}")
     if league_context_warning:
         print(f"League context warning: {league_context_warning}")
+    if team_context_warning:
+        print(f"Team context warning: {team_context_warning}")
     print(f"Database: {config.db_path}")
 
 

@@ -37,9 +37,9 @@ with st.container(border=True):
     render_section_heading("Filters", "Refine the live leaderboard by hitter, month, or home and away split.")
     render_filter_caption("Live leaderboard filters")
     filter_col_1, filter_col_2, filter_col_3 = st.columns(3)
-    player_filter = filter_col_1.selectbox("Player", options=["All players"] + players)
-    month_filter = filter_col_2.selectbox("Month", options=list(month_options.keys()))
-    home_away_filter = filter_col_3.selectbox("Home / Away", options=["All", "Home", "Away"])
+    player_filter = filter_col_1.selectbox("Player", options=["All players"] + players, key="longest_hr_player_filter")
+    month_filter = filter_col_2.selectbox("Month", options=list(month_options.keys()), key="longest_hr_month_filter")
+    home_away_filter = filter_col_3.selectbox("Home / Away", options=["All", "Home", "Away"], key="longest_hr_home_away_filter")
 
 results = get_top_longest_home_runs(
     conn,
