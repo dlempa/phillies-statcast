@@ -13,7 +13,7 @@ if str(SRC_PATH) not in sys.path:
 
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
-from phillies_stats.display import format_player_name, render_highlight_table
+from phillies_stats.display import render_highlight_table
 from phillies_stats.queries import (
     get_fastest_pitches,
     get_last_updated,
@@ -22,7 +22,7 @@ from phillies_stats.queries import (
     get_pitcher_walks_leaders,
     get_pitcher_wins_leaders,
     get_pitching_dashboard_metrics,
-    get_team_pitcher_velocity_trend,
+    get_team_pitching_run_prevention_trend,
 )
 from phillies_stats.ui import apply_app_theme, format_card, format_timestamp, render_page_header, render_section_heading, render_stat_cards, style_chart
 
@@ -46,7 +46,7 @@ wins_leaders = get_pitcher_wins_leaders(conn, limit=6)
 walks_leaders = get_pitcher_walks_leaders(conn, limit=6)
 home_run_allowed = get_pitcher_home_run_allowed_leaders(conn, limit=6)
 fastest_pitches = get_fastest_pitches(conn, limit=6)
-velocity_trend = get_team_pitcher_velocity_trend(conn)
+run_prevention_trend = get_team_pitching_run_prevention_trend(conn)
 
 render_page_header(
     "Pitching Dashboard",
@@ -68,26 +68,45 @@ primary_col, side_col = st.columns([1.35, 1])
 
 with primary_col:
     with st.container(border=True):
-        render_section_heading("Primary Chart", "Maximum Phillies velocity by pitcher and game date across the season.")
-        if velocity_trend.empty:
-            st.info("Velocity trend data will appear once Phillies pitching events are loaded.")
+        render_section_heading(
+            "Staff Run Prevention Trend",
+            "Runs allowed by game with a 5-game staff RA/G trend and season-to-date RA/G reference.",
+        )
+        if run_prevention_trend.empty:
+            st.info("Run prevention trend data will appear once completed Phillies games are loaded.")
         else:
-            chart_data = velocity_trend.copy()
-            chart_data["player_name"] = chart_data["player_name"].map(format_player_name)
-            chart = style_chart(
-                alt.Chart(chart_data)
-                .mark_line(point=True, strokeWidth=2.4)
+            chart_data = run_prevention_trend.copy()
+            latest_season_ra = chart_data["season_ra_per_game"].iloc[-1]
+            base = alt.Chart(chart_data).encode(
+                x=alt.X("game_date:T", title="Date"),
+                tooltip=[
+                    alt.Tooltip("game_date:T", title="Date", format="%m-%d-%Y"),
+                    alt.Tooltip("opponent:N", title="Opponent"),
+                    alt.Tooltip("result_text:N", title="Result"),
+                    alt.Tooltip("runs_allowed:Q", title="Runs Allowed"),
+                    alt.Tooltip("strikeouts:Q", title="Strikeouts"),
+                    alt.Tooltip("walks:Q", title="Walks"),
+                    alt.Tooltip("home_runs_allowed:Q", title="HR Allowed"),
+                    alt.Tooltip("rolling_5_ra_per_game:Q", title="5-Game RA/G", format=".2f"),
+                    alt.Tooltip("season_ra_per_game:Q", title="Season RA/G", format=".2f"),
+                ],
+            )
+            bars = base.mark_bar(size=14, color="#9CA3AF", opacity=0.42).encode(
+                y=alt.Y("runs_allowed:Q", title="Runs Allowed"),
+            )
+            rolling_line = base.mark_line(point=True, strokeWidth=3, color="#E81828").encode(
+                y=alt.Y("rolling_5_ra_per_game:Q", title="Runs Allowed / RA per Game"),
+            )
+            season_rule = (
+                alt.Chart({"values": [{"season_ra_per_game": latest_season_ra}]})
+                .mark_rule(strokeDash=[6, 5], strokeWidth=2, color="#1F2933", opacity=0.7)
                 .encode(
-                    x=alt.X("game_date:T", title="Date"),
-                    y=alt.Y("max_velocity_mph:Q", title="Max Velocity (mph)"),
-                    color=alt.Color("player_name:N", title="Pitcher"),
-                    tooltip=[
-                        alt.Tooltip("player_name:N", title="Pitcher"),
-                        alt.Tooltip("max_velocity_mph:Q", title="Max Velocity (mph)", format=".2f"),
-                        alt.Tooltip("game_date:T", title="Date", format="%m-%d-%Y"),
-                    ],
+                    y=alt.Y("season_ra_per_game:Q"),
+                    tooltip=[alt.Tooltip("season_ra_per_game:Q", title="Season RA/G", format=".2f")],
                 )
-                .interactive(),
+            )
+            chart = style_chart(
+                (bars + rolling_line + season_rule).resolve_scale(y="shared").interactive(),
                 height=380,
             )
             st.altair_chart(chart, use_container_width=True)
