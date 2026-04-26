@@ -4,12 +4,13 @@ import streamlit as st
 
 from phillies_stats.config import get_config
 from phillies_stats.database import get_connection, initialize_database
-from phillies_stats.queries import get_last_updated
+from phillies_stats.queries import get_last_updated, get_latest_team_state_summary
 from phillies_stats.ui import (
     apply_app_theme,
     format_timestamp,
     render_page_header,
     render_section_heading,
+    render_team_state_summary,
 )
 
 
@@ -30,6 +31,8 @@ def render_home(team_stats_page, batter_stats_page, pitcher_stats_page) -> None:
 
     if not last_updated:
         st.info("No Statcast data is loaded yet. Run the bootstrap script to backfill the season.")
+
+    render_team_state_summary(get_latest_team_state_summary(conn, season=config.season))
 
     render_section_heading("Explore The Data")
     team_col, batter_col, pitcher_col = st.columns(3)

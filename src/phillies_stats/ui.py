@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import mimetypes
 from base64 import b64encode
 from datetime import date, datetime
@@ -243,6 +244,125 @@ div.stButton > button:hover {
     font-weight: 600;
 }
 
+.state-summary-panel {
+    background: var(--ph-panel);
+    border: 1px solid var(--ph-border);
+    border-left: 5px solid var(--ph-accent);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    margin: 0 0 1rem;
+    box-shadow: 0 6px 18px rgba(31, 41, 51, 0.06);
+}
+
+.state-summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.65rem;
+}
+
+.state-summary-kicker {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ph-accent-dark);
+    background: var(--ph-accent-soft);
+    border: 1px solid var(--ph-border-strong);
+    border-radius: 8px;
+    padding: 0.28rem 0.52rem;
+    font-size: 0.76rem;
+    line-height: 1.15;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.state-summary-title {
+    color: var(--ph-text);
+    font-size: 1.32rem;
+    line-height: 1.2;
+    font-weight: 700;
+    margin: 0.55rem 0 0;
+}
+
+.state-summary-date {
+    color: var(--ph-muted);
+    font-size: 0.86rem;
+    line-height: 1.4;
+    flex: 0 0 auto;
+    padding-top: 0.1rem;
+    text-align: right;
+}
+
+.state-summary-copy {
+    color: var(--ph-text);
+    font-size: 1rem;
+    line-height: 1.58;
+    margin: 0.15rem 0 0;
+    max-width: 68rem;
+}
+
+.state-stat-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.85rem;
+}
+
+.state-stat-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.38rem;
+    min-height: 2rem;
+    border: 1px solid var(--ph-border);
+    border-radius: 8px;
+    background: var(--ph-panel-soft);
+    padding: 0.35rem 0.55rem;
+    color: var(--ph-text);
+}
+
+.state-stat-label {
+    color: var(--ph-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.state-stat-value {
+    color: var(--ph-text);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.state-source-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.8rem;
+    color: var(--ph-muted);
+    font-size: 0.84rem;
+}
+
+.state-source-label {
+    color: var(--ph-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0;
+    font-size: 0.74rem;
+}
+
+.state-source-row a {
+    color: var(--ph-accent-dark);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.state-source-row a:hover {
+    text-decoration: underline;
+}
+
 .phillies-mark {
     width: 4.6rem;
     height: 4.6rem;
@@ -482,6 +602,15 @@ table.phillies-table .cell-rank {
         flex-wrap: wrap;
     }
 
+    .state-summary-header {
+        display: block;
+    }
+
+    .state-summary-date {
+        text-align: left;
+        margin-top: 0.55rem;
+    }
+
 }
 </style>
 """
@@ -542,6 +671,39 @@ def render_section_heading(title: str, subtitle: str | None = None) -> None:
             <h2>{escape(title)}</h2>
             {subtitle_html}
         </div>
+        """,
+    )
+
+
+def render_team_state_summary(summary: dict[str, object] | None) -> None:
+    if not summary:
+        return
+
+    headline = str(summary.get("headline") or "State of the Phillies")
+    summary_text = str(summary.get("summary_text") or "").strip()
+    if not summary_text:
+        return
+
+    tone_label = str(summary.get("tone_label") or "Team Snapshot")
+    updated = format_timestamp(summary.get("as_of_date")) or format_timestamp(summary.get("generated_at"))
+    date_html = f"<div class='state-summary-date'>{escape(updated)}</div>" if updated else ""
+    stat_html = _state_summary_stats_html(_json_list(summary.get("key_stats_json")))
+    source_html = _state_summary_sources_html(_json_list(summary.get("sources_json")))
+
+    st.html(
+        f"""
+        <section class="state-summary-panel">
+            <div class="state-summary-header">
+                <div>
+                    <div class="state-summary-kicker">{escape(tone_label)}</div>
+                    <h2 class="state-summary-title">{escape(headline)}</h2>
+                </div>
+                {date_html}
+            </div>
+            <p class="state-summary-copy">{escape(summary_text)}</p>
+            {stat_html}
+            {source_html}
+        </section>
         """,
     )
 
@@ -635,3 +797,62 @@ def format_timestamp(value: object) -> str | None:
     if isinstance(value, date):
         return value.strftime("%b %d, %Y")
     return str(value)
+
+
+def _json_list(value: object) -> list[object]:
+    if isinstance(value, list):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _state_summary_stats_html(stats: list[object]) -> str:
+    stat_items = []
+    for item in stats[:5]:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "").strip()
+        value = str(item.get("value") or "").strip()
+        if not label and not value:
+            continue
+        if value:
+            stat_items.append(
+                "<div class='state-stat-pill'>"
+                f"<span class='state-stat-label'>{escape(label)}</span>"
+                f"<span class='state-stat-value'>{escape(value)}</span>"
+                "</div>"
+            )
+        else:
+            stat_items.append(
+                "<div class='state-stat-pill'>"
+                f"<span class='state-stat-value'>{escape(label)}</span>"
+                "</div>"
+            )
+    if not stat_items:
+        return ""
+    return f"<div class='state-stat-strip'>{''.join(stat_items)}</div>"
+
+
+def _state_summary_sources_html(sources: list[object]) -> str:
+    source_links = []
+    for source in sources[:5]:
+        if not isinstance(source, dict):
+            continue
+        label = str(source.get("label") or "Source").strip()
+        url = str(source.get("url") or "").strip()
+        if not label or not url.startswith(("http://", "https://")):
+            continue
+        source_links.append(f"<a href='{escape(url, quote=True)}' target='_blank'>{escape(label)}</a>")
+    if not source_links:
+        return ""
+    return (
+        "<div class='state-source-row'>"
+        "<span class='state-source-label'>Sources</span>"
+        f"{' | '.join(source_links)}"
+        "</div>"
+    )

@@ -213,6 +213,19 @@ def initialize_database(conn: duckdb.DuckDBPyConnection) -> None:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (season, as_of_date, team_abbr)
         );
+
+        CREATE TABLE IF NOT EXISTS team_state_summaries (
+            season INTEGER NOT NULL,
+            as_of_date DATE NOT NULL,
+            headline TEXT NOT NULL,
+            summary_text TEXT NOT NULL,
+            tone_label TEXT,
+            key_stats_json TEXT,
+            sources_json TEXT,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            prompt_version TEXT,
+            PRIMARY KEY (season, as_of_date)
+        );
         """
     )
     create_views(conn)

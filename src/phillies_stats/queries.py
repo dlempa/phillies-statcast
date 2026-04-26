@@ -534,6 +534,43 @@ def get_team_run_differential_trend(conn: duckdb.DuckDBPyConnection) -> pd.DataF
     return frame
 
 
+def get_latest_team_state_summary(conn: duckdb.DuckDBPyConnection, *, season: int | None = None) -> dict[str, object] | None:
+    config = get_config(season)
+    row = conn.execute(
+        """
+        SELECT
+            season,
+            as_of_date,
+            headline,
+            summary_text,
+            tone_label,
+            key_stats_json,
+            sources_json,
+            generated_at,
+            prompt_version
+        FROM team_state_summaries
+        WHERE season = ?
+        ORDER BY as_of_date DESC, generated_at DESC
+        LIMIT 1
+        """,
+        [config.season],
+    ).fetchone()
+    if row is None:
+        return None
+    columns = [
+        "season",
+        "as_of_date",
+        "headline",
+        "summary_text",
+        "tone_label",
+        "key_stats_json",
+        "sources_json",
+        "generated_at",
+        "prompt_version",
+    ]
+    return dict(zip(columns, row))
+
+
 def _ensure_pitcher_summary_loaded(conn: duckdb.DuckDBPyConnection) -> None:
     row = conn.execute("SELECT COUNT(*) FROM pitcher_season_summary").fetchone()
     if row and row[0] > 0:
