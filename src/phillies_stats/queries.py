@@ -534,6 +534,49 @@ def get_team_run_differential_trend(conn: duckdb.DuckDBPyConnection) -> pd.DataF
     return frame
 
 
+def get_team_pitching_run_prevention_trend(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    frame = conn.execute(
+        """
+        WITH pitching_events AS (
+            SELECT
+                game_pk,
+                SUM(CASE WHEN is_strikeout = TRUE THEN 1 ELSE 0 END) AS strikeouts,
+                SUM(CASE WHEN events IN ('walk', 'intent_walk') THEN 1 ELSE 0 END) AS walks,
+                SUM(CASE WHEN events = 'home_run' THEN 1 ELSE 0 END) AS home_runs_allowed
+            FROM statcast_events
+            WHERE is_phillies_pitcher = TRUE
+            GROUP BY game_pk
+        )
+        SELECT
+            g.game_pk,
+            g.game_date,
+            g.opponent,
+            g.result_text,
+            CASE WHEN g.phillies_home THEN g.away_score ELSE g.home_score END AS runs_allowed,
+            COALESCE(p.strikeouts, 0) AS strikeouts,
+            COALESCE(p.walks, 0) AS walks,
+            COALESCE(p.home_runs_allowed, 0) AS home_runs_allowed
+        FROM games g
+        LEFT JOIN pitching_events p
+            ON g.game_pk = p.game_pk
+        WHERE g.result_text IS NOT NULL
+        ORDER BY g.game_date ASC, g.game_pk ASC
+        """
+    ).df()
+    if frame.empty:
+        return frame
+
+    frame["runs_allowed"] = pd.to_numeric(frame["runs_allowed"], errors="coerce").fillna(0)
+    for column in ["strikeouts", "walks", "home_runs_allowed"]:
+        frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0).astype(int)
+
+    frame["game_number"] = range(1, len(frame) + 1)
+    frame["rolling_5_ra_per_game"] = frame["runs_allowed"].rolling(window=5, min_periods=1).mean().round(2)
+    frame["season_ra_per_game"] = (frame["runs_allowed"].cumsum() / frame["game_number"]).round(2)
+    frame["runs_allowed"] = frame["runs_allowed"].astype(int)
+    return frame
+
+
 def get_latest_team_state_summary(conn: duckdb.DuckDBPyConnection, *, season: int | None = None) -> dict[str, object] | None:
     config = get_config(season)
     row = conn.execute(

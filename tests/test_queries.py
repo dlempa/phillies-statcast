@@ -15,6 +15,7 @@ from phillies_stats.queries import (
     get_pitcher_strikeout_leaders,
     get_pitcher_walks_leaders,
     get_pitcher_wins_leaders,
+    get_team_pitching_run_prevention_trend,
     get_player_options,
     get_player_summary,
     get_player_hr_distance_stats,
@@ -75,6 +76,61 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(updated.iloc[0]["player_name"], "Nick Castellanos")
         self.assertEqual(updated.iloc[0]["distance_ft"], 451.0)
         self.assertEqual(updated.iloc[2]["player_name"], "Bryce Harper")
+
+    def test_team_pitching_run_prevention_trend_uses_game_scores_and_pitching_events(self):
+        rows = [
+            _pitching_event(
+                "game-1-strikeout",
+                901,
+                date(2026, 4, 1),
+                home_team="PHI",
+                away_team="ATL",
+                post_home_score=5,
+                post_away_score=3,
+                events="strikeout",
+                is_strikeout=True,
+            ),
+            _pitching_event(
+                "game-1-walk",
+                901,
+                date(2026, 4, 1),
+                home_team="PHI",
+                away_team="ATL",
+                post_home_score=5,
+                post_away_score=3,
+                events="walk",
+            ),
+            _pitching_event(
+                "game-1-homer",
+                901,
+                date(2026, 4, 1),
+                home_team="PHI",
+                away_team="ATL",
+                post_home_score=5,
+                post_away_score=3,
+                events="home_run",
+                is_home_run=True,
+            ),
+            _pitching_event("game-2", 902, date(2026, 4, 2), home_team="NYM", away_team="PHI", post_home_score=4, post_away_score=2),
+            _pitching_event("game-3", 903, date(2026, 4, 3), home_team="PHI", away_team="MIA", post_home_score=1, post_away_score=0),
+            _pitching_event("game-4", 904, date(2026, 4, 4), home_team="WSH", away_team="PHI", post_home_score=8, post_away_score=9),
+            _pitching_event("game-5", 905, date(2026, 4, 5), home_team="PHI", away_team="STL", post_home_score=6, post_away_score=5),
+            _pitching_event("game-6", 906, date(2026, 4, 6), home_team="CHC", away_team="PHI", post_home_score=2, post_away_score=7),
+        ]
+
+        with TempDatabase() as conn:
+            upsert_statcast_data(conn, sample_events_frame(*rows), season=2026)
+            trend = get_team_pitching_run_prevention_trend(conn)
+
+        self.assertEqual(trend["runs_allowed"].tolist(), [3, 4, 0, 8, 5, 2])
+        self.assertEqual(trend["game_number"].tolist(), [1, 2, 3, 4, 5, 6])
+        self.assertEqual(trend.iloc[0]["strikeouts"], 1)
+        self.assertEqual(trend.iloc[0]["walks"], 1)
+        self.assertEqual(trend.iloc[0]["home_runs_allowed"], 1)
+        self.assertEqual(trend.iloc[0]["rolling_5_ra_per_game"], 3.00)
+        self.assertEqual(trend.iloc[4]["rolling_5_ra_per_game"], 4.00)
+        self.assertEqual(trend.iloc[5]["rolling_5_ra_per_game"], 3.80)
+        self.assertEqual(trend.iloc[5]["season_ra_per_game"], 3.67)
 
     def test_hardest_hit_balls_excludes_blank_names_and_limits_to_ten(self):
         rows = []
@@ -632,6 +688,47 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(leaders.iloc[0]["player_name"], "Cristopher Sanchez")
         self.assertEqual(leaders.iloc[0]["strikeouts"], 1)
         self.assertEqual(leaders.iloc[0]["position"], "Reliever")
+
+
+def _pitching_event(
+    event_id: str,
+    game_pk: int,
+    game_date_value: date,
+    *,
+    home_team: str,
+    away_team: str,
+    post_home_score: int,
+    post_away_score: int,
+    events: str = "field_out",
+    is_strikeout: bool = False,
+    is_home_run: bool = False,
+) -> dict[str, object]:
+    phillies_home = home_team == "PHI"
+    opponent = away_team if phillies_home else home_team
+    return sample_event(
+        event_id=event_id,
+        game_pk=game_pk,
+        game_date_value=game_date_value,
+        batter_name=f"{opponent} Hitter",
+        batter_id=game_pk,
+        pitcher_name="Phillies Pitcher",
+        pitcher_id=7000,
+        events=events,
+        is_home_run=is_home_run,
+        is_strikeout=is_strikeout,
+        is_in_play=is_home_run or events == "field_out",
+        phillies_role="pitching",
+        is_phillies_batter=False,
+        is_phillies_pitcher=True,
+        batting_team=opponent,
+        fielding_team="PHI",
+        home_team=home_team,
+        away_team=away_team,
+        opponent=opponent,
+        inning_topbot="Top" if phillies_home else "Bot",
+        post_home_score=post_home_score,
+        post_away_score=post_away_score,
+    )
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 from base64 import b64encode
 from datetime import date, datetime
 from html import escape
@@ -245,53 +246,84 @@ div.stButton > button:hover {
 }
 
 .state-summary-panel {
-    background: var(--ph-panel);
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #ffffff 0%, #ffffff 58%, #fff6f7 100%);
     border: 1px solid var(--ph-border);
     border-left: 5px solid var(--ph-accent);
     border-radius: 8px;
-    padding: 1rem 1.1rem;
+    padding: 1.05rem 1.15rem 1.1rem;
     margin: 0 0 1rem;
-    box-shadow: 0 6px 18px rgba(31, 41, 51, 0.06);
+    box-shadow: var(--ph-shadow);
 }
 
 .state-summary-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 1rem;
-    margin-bottom: 0.65rem;
+    gap: 1.25rem;
+    margin-bottom: 0.7rem;
 }
 
-.state-summary-kicker {
-    display: inline-flex;
-    align-items: center;
-    color: var(--ph-accent-dark);
-    background: var(--ph-accent-soft);
-    border: 1px solid var(--ph-border-strong);
-    border-radius: 8px;
-    padding: 0.28rem 0.52rem;
-    font-size: 0.76rem;
-    line-height: 1.15;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0;
+.state-summary-heading {
+    min-width: 0;
 }
 
 .state-summary-title {
     color: var(--ph-text);
-    font-size: 1.32rem;
-    line-height: 1.2;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: 1.42rem;
+    line-height: 1.12;
     font-weight: 700;
-    margin: 0.55rem 0 0;
+    margin: 0;
+}
+
+.state-summary-headline {
+    color: var(--ph-accent-dark);
+    font-size: 0.98rem;
+    line-height: 1.35;
+    font-weight: 700;
+    margin-top: 0.35rem;
+    max-width: 54rem;
+}
+
+.state-summary-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    flex: 0 0 auto;
+}
+
+.state-summary-visual {
+    width: 3.25rem;
+    height: 3.25rem;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--ph-border-strong);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 5px 14px rgba(31, 41, 51, 0.08);
+}
+
+.state-summary-visual .phillies-logo-mark {
+    width: 2.65rem;
+    height: 2.65rem;
+}
+
+.state-summary-visual .phillies-mark {
+    width: 2.7rem;
+    height: 2.7rem;
+    font-size: 1.9rem;
 }
 
 .state-summary-date {
     color: var(--ph-muted);
-    font-size: 0.86rem;
+    font-size: 0.82rem;
     line-height: 1.4;
-    flex: 0 0 auto;
-    padding-top: 0.1rem;
     text-align: right;
+    max-width: 11rem;
 }
 
 .state-summary-copy {
@@ -311,7 +343,7 @@ div.stButton > button:hover {
 
 .state-stat-pill {
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.38rem;
     min-height: 2rem;
     border: 1px solid var(--ph-border);
@@ -319,6 +351,21 @@ div.stButton > button:hover {
     background: var(--ph-panel-soft);
     padding: 0.35rem 0.55rem;
     color: var(--ph-text);
+}
+
+.state-stat-pill--tone {
+    background: var(--ph-accent-soft);
+    border-color: var(--ph-border-strong);
+    color: var(--ph-accent-dark);
+}
+
+.state-stat-pill--tone::before {
+    content: "";
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 999px;
+    background: var(--ph-accent);
+    box-shadow: 0 0 0 3px rgba(232, 24, 40, 0.12);
 }
 
 .state-stat-label {
@@ -606,9 +653,14 @@ table.phillies-table .cell-rank {
         display: block;
     }
 
+    .state-summary-meta {
+        justify-content: space-between;
+        margin-top: 0.7rem;
+    }
+
     .state-summary-date {
         text-align: left;
-        margin-top: 0.55rem;
+        max-width: none;
     }
 
 }
@@ -679,26 +731,34 @@ def render_team_state_summary(summary: dict[str, object] | None) -> None:
     if not summary:
         return
 
-    headline = str(summary.get("headline") or "State of the Phillies")
-    summary_text = str(summary.get("summary_text") or "").strip()
+    card_title = "State of the Phillies"
+    headline = _clean_state_summary_text(summary.get("headline"))
+    summary_text = _clean_state_summary_text(summary.get("summary_text"))
     if not summary_text:
         return
 
-    tone_label = str(summary.get("tone_label") or "Team Snapshot")
+    tone_label = _clean_state_summary_text(summary.get("tone_label")) or "Team Snapshot"
     updated = format_timestamp(summary.get("as_of_date")) or format_timestamp(summary.get("generated_at"))
     date_html = f"<div class='state-summary-date'>{escape(updated)}</div>" if updated else ""
-    stat_html = _state_summary_stats_html(_json_list(summary.get("key_stats_json")))
+    headline_html = ""
+    if headline and headline.casefold() != card_title.casefold():
+        headline_html = f"<div class='state-summary-headline'>{escape(headline)}</div>"
+    stat_html = _state_summary_stats_html(_json_list(summary.get("key_stats_json")), tone_label=tone_label)
     source_html = _state_summary_sources_html(_json_list(summary.get("sources_json")))
+    visual_html = f"<div class='state-summary-visual' aria-hidden='true'>{render_logo_mark()}</div>"
 
     st.html(
         f"""
         <section class="state-summary-panel">
             <div class="state-summary-header">
-                <div>
-                    <div class="state-summary-kicker">{escape(tone_label)}</div>
-                    <h2 class="state-summary-title">{escape(headline)}</h2>
+                <div class="state-summary-heading">
+                    <h2 class="state-summary-title">{escape(card_title)}</h2>
+                    {headline_html}
                 </div>
-                {date_html}
+                <div class="state-summary-meta">
+                    {date_html}
+                    {visual_html}
+                </div>
             </div>
             <p class="state-summary-copy">{escape(summary_text)}</p>
             {stat_html}
@@ -811,13 +871,25 @@ def _json_list(value: object) -> list[object]:
     return parsed if isinstance(parsed, list) else []
 
 
-def _state_summary_stats_html(stats: list[object]) -> str:
+def _clean_state_summary_text(value: object) -> str:
+    text = str(value or "").strip()
+    return re.sub(r"(?<=[A-Za-z0-9])\?(?=[A-Za-z])", "'", text)
+
+
+def _state_summary_stats_html(stats: list[object], *, tone_label: str | None = None) -> str:
     stat_items = []
+    tone_text = _clean_state_summary_text(tone_label)
+    if tone_text:
+        stat_items.append(
+            "<div class='state-stat-pill state-stat-pill--tone'>"
+            f"<span class='state-stat-value'>{escape(tone_text)}</span>"
+            "</div>"
+        )
     for item in stats[:5]:
         if not isinstance(item, dict):
             continue
-        label = str(item.get("label") or "").strip()
-        value = str(item.get("value") or "").strip()
+        label = _clean_state_summary_text(item.get("label"))
+        value = _clean_state_summary_text(item.get("value"))
         if not label and not value:
             continue
         if value:
@@ -843,7 +915,7 @@ def _state_summary_sources_html(sources: list[object]) -> str:
     for source in sources[:5]:
         if not isinstance(source, dict):
             continue
-        label = str(source.get("label") or "Source").strip()
+        label = _clean_state_summary_text(source.get("label") or "Source")
         url = str(source.get("url") or "").strip()
         if not label or not url.startswith(("http://", "https://")):
             continue
