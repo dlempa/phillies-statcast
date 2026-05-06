@@ -1,0 +1,73 @@
+{
+  "season": 2026,
+  "as_of_date": "2026-05-05",
+  "headline": "Nola and Harper give the Phillies a real foothold",
+  "summary_text": "The Phillies are still digging out at 15-20, fourth in the NL East and 9.5 games back, but the last week finally changed the shape of the conversation. Monday's 1-0 win in Miami gave them a series win, a 7-3 last-10 mark and a two-game winning streak, with Bryce Harper supplying the only run on his seventh homer and Aaron Nola answering with six scoreless innings and no walks. The larger profile remains uneven: Philadelphia is carrying a -42 run differential, a .667 OPS and a 4.61 team ERA, so this is not a clean turnaround yet. It is, however, the first stretch in a while where the pitching has given the lineup enough margin, and the upcoming Athletics series at Citizens Bank Park gives the Phillies a practical chance to turn a rebound into something more durable.",
+  "tone_label": "Cautious Rebound",
+  "key_stats": [
+    {
+      "label": "Record",
+      "value": "15-20"
+    },
+    {
+      "label": "NL East",
+      "value": "4th, 9.5 GB"
+    },
+    {
+      "label": "Current streak",
+      "value": "W2"
+    },
+    {
+      "label": "Last 10",
+      "value": "7-3"
+    },
+    {
+      "label": "Run differential",
+      "value": "-42"
+    },
+    {
+      "label": "Latest game",
+      "value": "Won 1-0 at Miami on May 4"
+    },
+    {
+      "label": "Team OPS",
+      "value": ".667, 28th in MLB"
+    },
+    {
+      "label": "Team ERA",
+      "value": "4.61, 26th in MLB"
+    },
+    {
+      "label": "Strikeouts",
+      "value": "330, 2nd in MLB"
+    },
+    {
+      "label": "Power leaders",
+      "value": "Kyle Schwarber 11 HR; Bryce Harper 7 HR"
+    },
+    {
+      "label": "Pitching leaders",
+      "value": "Jesus Luzardo 51 K; Cristopher Sanchez 2.90 ERA"
+    }
+  ],
+  "sources": [
+    {
+      "label": "Phillies Nation",
+      "url": "https://philliesnation.com/2026/05/philadelphia-phillies-miami-marlins-recap-aaron-nola/"
+    },
+    {
+      "label": "CBS Philadelphia/AP",
+      "url": "https://www.cbsnews.com/philadelphia/news/bryce-harper-aaron-nola-phillies-vs-marlins/"
+    },
+    {
+      "label": "Phillies Nation",
+      "url": "https://philliesnation.com/2026/05/how-to-watch-phillies-vs-athletics/"
+    },
+    {
+      "label": "FOX Sports/AP",
+      "url": "https://www.foxsports.com/articles/mlb/phillies-host-the-athletics-aim-to-extend-home-win-streak"
+    }
+  ],
+  "generated_at": "2026-05-05T23:22:31Z",
+  "prompt_version": "state-summary-v1"
+}

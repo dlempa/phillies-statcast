@@ -55,6 +55,10 @@ class AppConfig:
         return self.data_dir / f"phillies_{self.season}.duckdb"
 
     @property
+    def state_summary_path(self) -> Path:
+        return self.data_dir / f"state_of_the_phillies_{self.season}.json"
+
+    @property
     def season_start(self) -> date:
         return date(self.season, 1, 1)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -22,6 +23,7 @@ def upsert_team_state_summary(
     season: int | None = None,
 ) -> dict[str, Any]:
     row = normalize_team_state_summary_payload(payload, season=season)
+    _validate_requested_season(row, season)
     conn.execute(
         """
         DELETE FROM team_state_summaries
@@ -57,6 +59,33 @@ def upsert_team_state_summary(
             row["prompt_version"],
         ],
     )
+    return row
+
+
+def load_team_state_summary_file(path: Path, *, season: int | None = None) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    try:
+        row = normalize_team_state_summary_payload(payload, season=season)
+        _validate_requested_season(row, season)
+        return row
+    except StateSummaryValidationError:
+        return None
+
+
+def write_team_state_summary_file(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    season: int | None = None,
+) -> dict[str, Any]:
+    row = normalize_team_state_summary_payload(payload, season=season)
+    _validate_requested_season(row, season)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json_text_pretty(_summary_file_document(row)) + "\n", encoding="utf-8")
     return row
 
 
@@ -97,6 +126,13 @@ def _parse_season(value: object) -> int:
     if season < 1900 or season > 2100:
         raise StateSummaryValidationError("Summary season is outside the supported range.")
     return season
+
+
+def _validate_requested_season(row: dict[str, Any], season: int | None) -> None:
+    if season is None:
+        return
+    if row["season"] != int(season):
+        raise StateSummaryValidationError("Summary season does not match the requested season.")
 
 
 def _parse_date(value: object) -> date:
@@ -218,3 +254,28 @@ def _json_text(value: object) -> str:
         return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
     except (TypeError, ValueError) as exc:
         raise StateSummaryValidationError("Summary payload contains non-serializable JSON data.") from exc
+
+
+def _json_text_pretty(value: object) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=True, indent=2)
+    except (TypeError, ValueError) as exc:
+        raise StateSummaryValidationError("Summary payload contains non-serializable JSON data.") from exc
+
+
+def _summary_file_document(row: dict[str, Any]) -> dict[str, object]:
+    return {
+        "season": row["season"],
+        "as_of_date": row["as_of_date"].isoformat(),
+        "headline": row["headline"],
+        "summary_text": row["summary_text"],
+        "tone_label": row["tone_label"],
+        "key_stats": json.loads(row["key_stats_json"]),
+        "sources": json.loads(row["sources_json"]),
+        "generated_at": _generated_at_text(row["generated_at"]),
+        "prompt_version": row["prompt_version"],
+    }
+
+
+def _generated_at_text(value: datetime) -> str:
+    return value.replace(microsecond=0).isoformat() + "Z"
