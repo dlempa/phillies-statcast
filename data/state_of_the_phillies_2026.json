@@ -1,73 +1,65 @@
 {
   "season": 2026,
-  "as_of_date": "2026-05-05",
-  "headline": "Nola and Harper give the Phillies a real foothold",
-  "summary_text": "The Phillies are still digging out at 15-20, fourth in the NL East and 9.5 games back, but the last week finally changed the shape of the conversation. Monday's 1-0 win in Miami gave them a series win, a 7-3 last-10 mark and a two-game winning streak, with Bryce Harper supplying the only run on his seventh homer and Aaron Nola answering with six scoreless innings and no walks. The larger profile remains uneven: Philadelphia is carrying a -42 run differential, a .667 OPS and a 4.61 team ERA, so this is not a clean turnaround yet. It is, however, the first stretch in a while where the pitching has given the lineup enough margin, and the upcoming Athletics series at Citizens Bank Park gives the Phillies a practical chance to turn a rebound into something more durable.",
-  "tone_label": "Cautious Rebound",
+  "as_of_date": "2026-05-06",
+  "headline": "Harper and Sanchez turn the rebound into a streak",
+  "summary_text": "The Phillies' week finally has traction: after Aaron Nola and Bryce Harper squeezed out a 1-0 win in Miami, Harper homered twice and Cristopher Sanchez worked eight shutout innings in a 9-1 opener against the Athletics. That makes it three straight wins and pushes the club to 16-20, still fourth in the NL East but playing with a clearer formula than it had during the skid: starting pitching is carrying the run prevention, Harper is punishing mistakes, and the bullpen is settling into more defined roles. Wednesday's follow-up with Zack Wheeler against Jeffrey Springs is a good test of whether this is just a soft landing or the start of a real climb.",
+  "tone_label": "Momentum Check",
   "key_stats": [
     {
       "label": "Record",
-      "value": "15-20"
+      "value": "16-20"
     },
     {
       "label": "NL East",
-      "value": "4th, 9.5 GB"
+      "value": "4th"
     },
     {
       "label": "Current streak",
-      "value": "W2"
-    },
-    {
-      "label": "Last 10",
-      "value": "7-3"
-    },
-    {
-      "label": "Run differential",
-      "value": "-42"
+      "value": "W3"
     },
     {
       "label": "Latest game",
-      "value": "Won 1-0 at Miami on May 4"
+      "value": "Won 9-1 vs Athletics on May 5"
     },
     {
-      "label": "Team OPS",
-      "value": ".667, 28th in MLB"
+      "label": "Harper",
+      "value": "2 HR in May 5 win"
     },
     {
-      "label": "Team ERA",
-      "value": "4.61, 26th in MLB"
+      "label": "Sanchez",
+      "value": "8 scoreless IP on May 5"
     },
     {
-      "label": "Strikeouts",
-      "value": "330, 2nd in MLB"
+      "label": "Nola",
+      "value": "6 scoreless IP on May 4"
     },
     {
-      "label": "Power leaders",
-      "value": "Kyle Schwarber 11 HR; Bryce Harper 7 HR"
+      "label": "Next test",
+      "value": "Zack Wheeler vs Jeffrey Springs"
     },
     {
-      "label": "Pitching leaders",
-      "value": "Jesus Luzardo 51 K; Cristopher Sanchez 2.90 ERA"
+      "label": "Bullpen note",
+      "value": "Tim Mayza 3.50 ERA in 15 appearances"
     }
   ],
   "sources": [
     {
-      "label": "Phillies Nation",
-      "url": "https://philliesnation.com/2026/05/philadelphia-phillies-miami-marlins-recap-aaron-nola/"
+      "label": "The Good Phight",
+      "url": "https://www.thegoodphight.com/phillies-scores-standings/81292/harper-and-sanchez-partners-in-eliteness-phillies-9-athletics-1"
     },
     {
-      "label": "CBS Philadelphia/AP",
-      "url": "https://www.cbsnews.com/philadelphia/news/bryce-harper-aaron-nola-phillies-vs-marlins/"
+      "label": "Athletics Nation",
+      "url": "https://www.athleticsnation.com/athletics-game-information/104723/game-36-as-at-phillies-game-thread"
     },
     {
-      "label": "Phillies Nation",
-      "url": "https://philliesnation.com/2026/05/how-to-watch-phillies-vs-athletics/"
+      "label": "The Good Phight",
+      "url": "https://www.thegoodphight.com/philadelphia-phillies-news/81256/how-sheriff-tim-mayza-has-brought-the-fun-back-to-phillies-bullpen"
     },
     {
-      "label": "FOX Sports/AP",
-      "url": "https://www.foxsports.com/articles/mlb/phillies-host-the-athletics-aim-to-extend-home-win-streak"
+      "label": "FOX Sports",
+      "url": "https://www.foxsports.com/mlb/athletics-vs-philadelphia-phillies-may-06-2026-game-boxscore-95252"
     }
   ],
-  "generated_at": "2026-05-05T23:22:31Z",
-  "prompt_version": "state-summary-v1"
+  "generated_at": "2026-05-06T23:21:12Z",
+  "prompt_version": "state-summary-web-v1"
 }
