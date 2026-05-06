@@ -89,11 +89,13 @@ python .\scripts\update_daily.py --season 2026
 
 ## How To Store A State Summary
 
-The home page can show a generated "State of the Phillies" summary when a row exists in DuckDB. A Codex automation can generate a JSON payload after the daily stats update, then store it with:
+The home page shows a generated "State of the Phillies" summary from a JSON file when one exists. A Codex automation can generate a JSON payload from current web sources, then store it with:
 
 ```powershell
-python .\scripts\upsert_state_summary.py --season 2026 --payload .\state_summary.json
+python .\scripts\write_state_summary.py --season 2026 --payload .\state_summary.json
 ```
+
+This writes `data/state_of_the_phillies_2026.json`. The legacy DuckDB `team_state_summaries` table remains as a fallback, but the summary automation should commit only the JSON file.
 
 The payload should include a headline, 2-3 sentence summary, compact key stats, and source links. The user-facing summary should read like baseball analysis, not mention the database, web research, or the automation.
 
