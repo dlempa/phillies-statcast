@@ -1,65 +1,53 @@
 {
   "season": 2026,
-  "as_of_date": "2026-05-06",
-  "headline": "Harper and Sanchez turn the rebound into a streak",
-  "summary_text": "The Phillies' week finally has traction: after Aaron Nola and Bryce Harper squeezed out a 1-0 win in Miami, Harper homered twice and Cristopher Sanchez worked eight shutout innings in a 9-1 opener against the Athletics. That makes it three straight wins and pushes the club to 16-20, still fourth in the NL East but playing with a clearer formula than it had during the skid: starting pitching is carrying the run prevention, Harper is punishing mistakes, and the bullpen is settling into more defined roles. Wednesday's follow-up with Zack Wheeler against Jeffrey Springs is a good test of whether this is just a soft landing or the start of a real climb.",
-  "tone_label": "Momentum Check",
+  "as_of_date": "2026-05-10",
+  "headline": "Phillies sit at 18-22 with a -38 run differential",
+  "summary_text": "The Phillies are 18-22, 3rd, 9.0 GB in the NL East, with a -38 run differential through 40 games. The latest result was W 9-3 vs COL on May 9, and they are 7-3 over their last 10 games; the current streak is W1. The broader profile shows a .694, 22 of 30 MLB team OPS and a 4.68, 26 of 30 MLB team ERA, keeping the team picture grounded in both record and underlying performance.",
+  "tone_label": "Team Snapshot",
   "key_stats": [
     {
       "label": "Record",
-      "value": "16-20"
+      "value": "18-22"
     },
     {
       "label": "NL East",
-      "value": "4th"
+      "value": "3rd, 9.0 GB"
     },
     {
       "label": "Current streak",
-      "value": "W3"
+      "value": "W1"
+    },
+    {
+      "label": "Last 10",
+      "value": "7-3"
+    },
+    {
+      "label": "Run differential",
+      "value": "-38"
     },
     {
       "label": "Latest game",
-      "value": "Won 9-1 vs Athletics on May 5"
+      "value": "W 9-3 vs COL on May 9"
     },
     {
-      "label": "Harper",
-      "value": "2 HR in May 5 win"
+      "label": "Team OPS",
+      "value": ".694, 22 of 30 MLB"
     },
     {
-      "label": "Sanchez",
-      "value": "8 scoreless IP on May 5"
-    },
-    {
-      "label": "Nola",
-      "value": "6 scoreless IP on May 4"
-    },
-    {
-      "label": "Next test",
-      "value": "Zack Wheeler vs Jeffrey Springs"
-    },
-    {
-      "label": "Bullpen note",
-      "value": "Tim Mayza 3.50 ERA in 15 appearances"
+      "label": "Team ERA",
+      "value": "4.68, 26 of 30 MLB"
     }
   ],
   "sources": [
     {
-      "label": "The Good Phight",
-      "url": "https://www.thegoodphight.com/phillies-scores-standings/81292/harper-and-sanchez-partners-in-eliteness-phillies-9-athletics-1"
+      "label": "MLB Standings",
+      "url": "https://www.mlb.com/standings"
     },
     {
-      "label": "Athletics Nation",
-      "url": "https://www.athleticsnation.com/athletics-game-information/104723/game-36-as-at-phillies-game-thread"
-    },
-    {
-      "label": "The Good Phight",
-      "url": "https://www.thegoodphight.com/philadelphia-phillies-news/81256/how-sheriff-tim-mayza-has-brought-the-fun-back-to-phillies-bullpen"
-    },
-    {
-      "label": "FOX Sports",
-      "url": "https://www.foxsports.com/mlb/athletics-vs-philadelphia-phillies-may-06-2026-game-boxscore-95252"
+      "label": "Baseball Savant Statcast",
+      "url": "https://baseballsavant.mlb.com/statcast_search"
     }
   ],
-  "generated_at": "2026-05-06T23:21:12Z",
-  "prompt_version": "state-summary-web-v1"
+  "generated_at": "2026-05-10T16:31:41Z",
+  "prompt_version": "state-summary-local-v1"
 }
